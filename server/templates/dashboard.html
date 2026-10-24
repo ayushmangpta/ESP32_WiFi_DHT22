@@ -370,14 +370,35 @@
             color: var(--text-primary);
         }
         
-        .chart-controls {
+        .chart-header {
             display: flex;
-            gap: 6px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 12px;
         }
-        
-        .chart-btn {
-            padding: 6px 14px;
+
+        .chart-controls-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .chart-btn-group {
+            display: inline-flex;
+            background: rgba(17, 24, 39, 0.6);
+            padding: 3px;
+            border-radius: 100px;
             border: 1px solid var(--border-color);
+            gap: 2px;
+            flex-wrap: wrap;
+        }
+
+        .chart-btn {
+            padding: 6px 13px;
+            border: none;
             border-radius: 100px;
             background: transparent;
             color: var(--text-muted);
@@ -386,17 +407,322 @@
             font-family: inherit;
             cursor: pointer;
             transition: var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
         }
-        
-        .chart-btn:hover, .chart-btn.active {
+
+        .chart-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .chart-btn.active {
+            background: var(--accent-indigo);
+            color: #ffffff;
+            box-shadow: 0 0 14px rgba(99, 102, 241, 0.4);
+            font-weight: 600;
+        }
+
+        .btn-refresh-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            background: rgba(17, 24, 39, 0.6);
+            color: var(--text-muted);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition-fast);
+            font-size: 13px;
+        }
+
+        .btn-refresh-icon:hover {
+            color: var(--accent-indigo);
+            border-color: var(--accent-indigo);
+            transform: rotate(60deg);
+        }
+
+        /* ─── Custom Date Range Drawer ─── */
+        .custom-range-panel {
+            display: none;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: var(--radius-lg);
+            padding: 16px 20px;
+            margin-bottom: 18px;
+            animation: fadeInDown 0.25s ease-out;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .custom-range-panel.open {
+            display: block;
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .custom-range-grid {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 14px;
+        }
+
+        .custom-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1 1 210px;
+        }
+
+        .custom-field label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .custom-field input[type="datetime-local"] {
+            background: rgba(17, 24, 39, 0.95);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            font-size: 0.82rem;
+            font-family: inherit;
+            color-scheme: dark;
+            outline: none;
+            transition: var(--transition-fast);
+        }
+
+        .custom-field input[type="datetime-local"]:focus {
+            border-color: var(--accent-indigo);
+            box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+        }
+
+        .custom-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-apply-range {
+            padding: 8px 18px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, #6366f1, #818cf8);
+            color: #ffffff;
+            font-size: 0.8rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+            transition: var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-apply-range:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(99, 102, 241, 0.5);
+        }
+
+        .btn-reset-range {
+            padding: 8px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .btn-reset-range:hover {
+            color: var(--text-primary);
+            border-color: var(--text-secondary);
+        }
+
+        .quick-presets-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(75, 85, 99, 0.2);
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            flex-wrap: wrap;
+        }
+
+        .quick-preset-link {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(75, 85, 99, 0.3);
+            border-radius: 4px;
+            padding: 3px 8px;
+            color: var(--accent-indigo);
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.72rem;
+            transition: var(--transition-fast);
+        }
+
+        .quick-preset-link:hover {
             background: var(--accent-indigo-dim);
             border-color: var(--accent-indigo);
-            color: var(--accent-indigo);
+            color: #ffffff;
         }
-        
+
+        .range-error-msg {
+            color: var(--error-color);
+            font-size: 0.75rem;
+            margin-top: 8px;
+            display: none;
+        }
+
+        /* ─── Range Summary & Stats Ribbon ─── */
+        .chart-meta-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            background: rgba(17, 24, 39, 0.45);
+            border: 1px solid rgba(75, 85, 99, 0.2);
+            border-radius: var(--radius-md);
+            padding: 8px 14px;
+            margin-bottom: 18px;
+            font-size: 0.76rem;
+        }
+
+        .chart-meta-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .range-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 9px;
+            border-radius: 100px;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .range-badge.live {
+            background: var(--success-bg);
+            color: var(--success-color);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+        }
+
+        .range-badge.historical {
+            background: rgba(245, 158, 11, 0.12);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .range-pulse-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--success-color);
+            box-shadow: 0 0 6px var(--success-color);
+            animation: pulse 1.5s infinite;
+        }
+
+        .range-count-label {
+            color: var(--text-secondary);
+        }
+
+        .chart-meta-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .stat-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            border-radius: var(--radius-sm);
+            font-size: 0.74rem;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-pill.temp-pill {
+            border-color: rgba(249, 115, 22, 0.25);
+            color: var(--temp-color);
+        }
+
+        .stat-pill.humid-pill {
+            border-color: rgba(6, 182, 212, 0.25);
+            color: var(--humid-color);
+        }
+
+        .stat-pill-sub {
+            color: var(--text-muted);
+            font-size: 0.68rem;
+            font-weight: 400;
+        }
+
+        .stat-pill-val {
+            font-weight: 600;
+        }
+
+        .btn-resume-live {
+            background: var(--accent-indigo-dim);
+            border: 1px solid var(--accent-indigo);
+            color: var(--accent-indigo);
+            border-radius: 100px;
+            padding: 2px 9px;
+            font-size: 0.68rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .btn-resume-live:hover {
+            background: var(--accent-indigo);
+            color: #fff;
+        }
+
         .chart-canvas-wrapper {
             position: relative;
             height: 280px;
+        }
+
+        .chart-empty-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            background: rgba(17, 24, 39, 0.88);
+            border-radius: var(--radius-lg);
+            z-index: 5;
+            backdrop-filter: blur(4px);
         }
         
         /* ─── History Table ─── */
@@ -562,20 +888,83 @@
         <div class="chart-section">
             <div class="chart-header">
                 <div class="chart-title">📈 Readings Over Time</div>
-                <div class="chart-controls">
-                    <button class="chart-btn active" id="btnLast20" onclick="setChartLimit(20)">Last 20</button>
-                    <button class="chart-btn" id="btnLast50" onclick="setChartLimit(50)">Last 50</button>
-                    <button class="chart-btn" id="btnLast100" onclick="setChartLimit(100)">Last 100</button>
+                <div class="chart-controls-wrapper">
+                    <div class="chart-btn-group">
+                        <button class="chart-btn active" id="btnPreset20" onclick="selectPreset('20')">Last 20</button>
+                        <button class="chart-btn" id="btnPreset1h" onclick="selectPreset('1h')">1 Hour</button>
+                        <button class="chart-btn" id="btnPreset24h" onclick="selectPreset('24h')">24 Hours</button>
+                        <button class="chart-btn" id="btnPreset2d" onclick="selectPreset('2d')">2 Days</button>
+                        <button class="chart-btn" id="btnCustomRange" onclick="toggleCustomRange()">📅 Custom</button>
+                    </div>
+                    <button class="btn-refresh-icon" onclick="fetchHistory()" title="Refresh Graph Data">↻</button>
                 </div>
             </div>
+
+            <!-- Custom Date Range Collapsible Drawer -->
+            <div class="custom-range-panel" id="customRangePanel">
+                <div class="custom-range-grid">
+                    <div class="custom-field">
+                        <label for="customStart">📅 Start Date &amp; Time</label>
+                        <input type="datetime-local" id="customStart">
+                    </div>
+                    <div class="custom-field">
+                        <label for="customEnd">📅 End Date &amp; Time</label>
+                        <input type="datetime-local" id="customEnd">
+                    </div>
+                    <div class="custom-actions">
+                        <button class="btn-apply-range" onclick="applyCustomRange()">
+                            <span>⚡ Apply Range</span>
+                        </button>
+                        <button class="btn-reset-range" onclick="resetToLive()">Reset to Live</button>
+                    </div>
+                </div>
+                <div class="quick-presets-row">
+                    <span>Quick Shortcuts:</span>
+                    <button type="button" class="quick-preset-link" onclick="setCustomShortcut('today')">Today</button>
+                    <button type="button" class="quick-preset-link" onclick="setCustomShortcut('yesterday')">Yesterday</button>
+                    <button type="button" class="quick-preset-link" onclick="setCustomShortcut('7d')">Past 7 Days</button>
+                </div>
+                <div class="range-error-msg" id="rangeErrorMsg"></div>
+            </div>
+
+            <!-- Range Info & Aggregate Stats Ribbon -->
+            <div class="chart-meta-bar" id="chartMetaBar">
+                <div class="chart-meta-left">
+                    <span class="range-badge live" id="rangeModeBadge">
+                        <span class="range-pulse-dot"></span>
+                        <span id="rangeModeText">LIVE AUTO-REFRESH</span>
+                    </span>
+                    <span class="range-count-label" id="rangeCountLabel">Loading readings…</span>
+                    <button class="btn-resume-live" id="btnResumeLive" style="display: none;" onclick="resetToLive()">Resume Live ⚡</button>
+                </div>
+                <div class="chart-meta-right">
+                    <div class="stat-pill temp-pill" id="tempStatsPill" title="Temperature Range for this time window">
+                        <span>🌡️</span>
+                        <span class="stat-pill-sub">Temp:</span>
+                        <span class="stat-pill-val" id="tempRangeStats">--</span>
+                    </div>
+                    <div class="stat-pill humid-pill" id="humidStatsPill" title="Humidity Range for this time window">
+                        <span>💧</span>
+                        <span class="stat-pill-sub">Humid:</span>
+                        <span class="stat-pill-val" id="humidRangeStats">--</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="chart-canvas-wrapper">
                 <canvas id="historyChart"></canvas>
+                <div class="chart-empty-overlay" id="chartEmptyOverlay">
+                    <div class="no-data-icon" style="font-size:36px; margin-bottom:8px;">📊</div>
+                    <div class="no-data-text" id="chartEmptyText" style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">No readings recorded in this time range</div>
+                    <div class="no-data-sub" style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">Try selecting a wider date range or switch back to live mode.</div>
+                    <button class="btn-apply-range" style="font-size:0.75rem; padding:6px 14px;" onclick="resetToLive()">Switch to Live (Last 20)</button>
+                </div>
             </div>
         </div>
         
         <!-- History Table -->
         <div class="table-section">
-            <div class="table-title">📋 Recent Readings</div>
+            <div class="table-title">📋 Sensor Readings Log</div>
             <div id="tableContainer">
                 <div class="no-data" id="noData">
                     <div class="no-data-icon">📡</div>
@@ -588,11 +977,33 @@
     
     <script>
         // ─── State ─── 
-        let chartLimit = 20;
+        let rangeMode = 'preset';      // 'preset' or 'custom'
+        let currentPreset = '20';      // '20', '1h', '24h', '2d'
+        let customStartDate = '';
+        let customEndDate = '';
         let historyChart = null;
         let lastReadingId = null;
-        let pollInterval = null;
-        
+        let liveGaugeInterval = null;
+        let chartPollInterval = null;
+        let currentRawTimestamps = [];
+
+        const PRESETS = {
+            '20':  { label: 'Last 20',      query: 'limit=20', refreshMs: 3000, isLive: true },
+            '1h':  { label: 'Last 1 Hour',   query: 'hours=1',  refreshMs: 5000, isLive: true },
+            '24h': { label: 'Last 24 Hours', query: 'hours=24', refreshMs: 15000, isLive: true },
+            '2d':  { label: 'Last 2 Days',   query: 'hours=48', refreshMs: 20000, isLive: true }
+        };
+
+        function toLocalInputString(date) {
+            const pad = n => String(n).padStart(2, '0');
+            const yyyy = date.getFullYear();
+            const mm = pad(date.getMonth() + 1);
+            const dd = pad(date.getDate());
+            const hh = pad(date.getHours());
+            const min = pad(date.getMinutes());
+            return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+        }
+
         // ─── Chart Setup ─── 
         function initChart() {
             const ctx = document.getElementById('historyChart').getContext('2d');
@@ -617,7 +1028,7 @@
                             backgroundColor: tempGradient,
                             borderWidth: 2.5,
                             fill: true,
-                            tension: 0.4,
+                            tension: 0.35,
                             pointRadius: 3,
                             pointBackgroundColor: '#fb923c',
                             pointBorderColor: '#0a0e1a',
@@ -632,7 +1043,7 @@
                             backgroundColor: humidGradient,
                             borderWidth: 2.5,
                             fill: true,
-                            tension: 0.4,
+                            tension: 0.35,
                             pointRadius: 3,
                             pointBackgroundColor: '#22d3ee',
                             pointBorderColor: '#0a0e1a',
@@ -675,7 +1086,28 @@
                             titleFont: { family: 'Inter', weight: '600' },
                             bodyFont: { family: 'Inter' },
                             displayColors: true,
-                            boxPadding: 4
+                            boxPadding: 4,
+                            callbacks: {
+                                title: function(items) {
+                                    if (!items || !items.length) return '';
+                                    const idx = items[0].dataIndex;
+                                    const rawIso = currentRawTimestamps[idx];
+                                    if (rawIso) {
+                                        return formatDateTime(rawIso);
+                                    }
+                                    return items[0].label;
+                                },
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(2);
+                                        if (context.datasetIndex === 0) label += ' °C';
+                                        else label += ' %';
+                                    }
+                                    return label;
+                                }
+                            }
                         }
                     },
                     scales: {
@@ -688,7 +1120,7 @@
                                 color: '#6b7280',
                                 font: { family: 'Inter', size: 10 },
                                 maxRotation: 45,
-                                maxTicksLimit: 10
+                                maxTicksLimit: 12
                             }
                         },
                         yTemp: {
@@ -702,9 +1134,6 @@
                                 color: '#fb923c',
                                 font: { family: 'Inter', size: 10 },
                                 callback: v => v + '°C'
-                            },
-                            title: {
-                                display: false
                             }
                         },
                         yHumid: {
@@ -715,9 +1144,6 @@
                                 color: '#22d3ee',
                                 font: { family: 'Inter', size: 10 },
                                 callback: v => v + '%'
-                            },
-                            title: {
-                                display: false
                             }
                         }
                     }
@@ -725,16 +1151,7 @@
             });
         }
         
-        // ─── Format timestamp ─── 
-        function formatTime(isoString) {
-            try {
-                const d = new Date(isoString);
-                return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            } catch {
-                return isoString;
-            }
-        }
-        
+        // ─── Format timestamps ─── 
         function formatDateTime(isoString) {
             try {
                 const d = new Date(isoString);
@@ -744,6 +1161,21 @@
                 });
             } catch {
                 return isoString;
+            }
+        }
+
+        function formatChartLabel(d, spanHours) {
+            try {
+                if (spanHours > 24) {
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+                           d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                } else if (spanHours > 2) {
+                    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                } else {
+                    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                }
+            } catch {
+                return '';
             }
         }
         
@@ -758,11 +1190,11 @@
         // ─── Animate Value ─── 
         function animateValue(el) {
             el.classList.remove('value-updated');
-            void el.offsetWidth; // trigger reflow
+            void el.offsetWidth;
             el.classList.add('value-updated');
         }
         
-        // ─── Update Latest Reading ─── 
+        // ─── Update Latest Reading (Real-time gauges) ─── 
         async function fetchLatest() {
             try {
                 const res = await fetch('/api/readings/latest');
@@ -776,26 +1208,25 @@
                 const tempEl = document.getElementById('tempValue');
                 const humidEl = document.getElementById('humidValue');
                 
-                // Update values
                 tempEl.innerHTML = data.temperature.toFixed(1) + '<span class="gauge-unit"> °C</span>';
                 humidEl.innerHTML = data.humidity.toFixed(1) + '<span class="gauge-unit"> %</span>';
                 
-                // Animate if new reading
                 if (data.id !== lastReadingId) {
                     animateValue(tempEl);
                     animateValue(humidEl);
                     lastReadingId = data.id;
                 }
                 
-                // Timestamps
                 const timeStr = formatDateTime(data.timestamp);
                 document.getElementById('tempTimestamp').textContent = 'Last updated: ' + timeStr;
                 document.getElementById('humidTimestamp').textContent = 'Last updated: ' + timeStr;
                 
-                // Total readings
                 document.getElementById('totalReadings').textContent = data.total_readings.toLocaleString();
                 
                 setStatus(true, 'Receiving data');
+                document.getElementById('serverStatus').textContent = 'Online';
+                document.getElementById('serverStatus').className = 'stat-value accent-success';
+                document.getElementById('serverStatus').style.color = '';
                 
             } catch (err) {
                 console.error('Failed to fetch latest:', err);
@@ -805,84 +1236,247 @@
                 document.getElementById('serverStatus').style.color = 'var(--error-color)';
             }
         }
-        
-        // ─── Update History ─── 
+
+        // ─── Update History / Range ─── 
         async function fetchHistory() {
+            let url = '/api/readings/history?';
+            if (rangeMode === 'custom') {
+                url += `start_time=${encodeURIComponent(customStartDate)}&end_time=${encodeURIComponent(customEndDate)}`;
+            } else {
+                const config = PRESETS[currentPreset] || PRESETS['20'];
+                url += config.query;
+            }
+
             try {
-                const res = await fetch('/api/readings/history?limit=' + chartLimit);
+                const res = await fetch(url);
                 const data = await res.json();
                 
-                if (!data.readings || data.readings.length === 0) {
-                    document.getElementById('tableContainer').innerHTML = `
-                        <div class="no-data">
-                            <div class="no-data-icon">📡</div>
-                            <div class="no-data-text">Waiting for sensor data…</div>
-                            <div class="no-data-sub">Make sure the ESP32 is powered on and connected to Wi-Fi.</div>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                // Reverse for chart (oldest → newest)
-                const chronological = [...data.readings].reverse();
-                
-                // Update chart
-                historyChart.data.labels = chronological.map(r => formatTime(r.timestamp));
-                historyChart.data.datasets[0].data = chronological.map(r => r.temperature);
-                historyChart.data.datasets[1].data = chronological.map(r => r.humidity);
-                historyChart.update('none');
-                
-                // Update table (newest first)
-                const rows = data.readings.slice(0, 20).map(r => `
-                    <tr>
-                        <td>${formatDateTime(r.timestamp)}</td>
-                        <td>${r.temperature.toFixed(2)} °C</td>
-                        <td>${r.humidity.toFixed(2)} %</td>
-                        <td style="color: var(--text-muted)">#${r.id}</td>
-                    </tr>
-                `).join('');
-                
-                document.getElementById('tableContainer').innerHTML = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Temperature</th>
-                                <th>Humidity</th>
-                                <th>ID</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                `;
-                
+                renderHistory(data);
             } catch (err) {
                 console.error('Failed to fetch history:', err);
             }
         }
-        
-        // ─── Chart limit buttons ─── 
-        function setChartLimit(limit) {
-            chartLimit = limit;
-            document.querySelectorAll('.chart-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('btnLast' + limit).classList.add('active');
+
+        function renderHistory(data) {
+            const overlay = document.getElementById('chartEmptyOverlay');
+            const countLabel = document.getElementById('rangeCountLabel');
+            const tempStats = document.getElementById('tempRangeStats');
+            const humidStats = document.getElementById('humidRangeStats');
+            const modeBadge = document.getElementById('rangeModeBadge');
+            const modeText = document.getElementById('rangeModeText');
+            const btnResume = document.getElementById('btnResumeLive');
+
+            // Update mode indicator
+            if (rangeMode === 'custom') {
+                modeBadge.className = 'range-badge historical';
+                modeText.textContent = 'HISTORICAL SNAPSHOT';
+                btnResume.style.display = 'inline-flex';
+            } else {
+                modeBadge.className = 'range-badge live';
+                modeText.textContent = 'LIVE AUTO-REFRESH';
+                btnResume.style.display = 'none';
+            }
+
+            // Update range statistics ribbon
+            if (data.stats && data.stats.min_temp !== null) {
+                tempStats.textContent = `Min ${data.stats.min_temp.toFixed(1)}° • Avg ${data.stats.avg_temp.toFixed(1)}° • Max ${data.stats.max_temp.toFixed(1)}°C`;
+                humidStats.textContent = `Min ${data.stats.min_humid.toFixed(1)}% • Avg ${data.stats.avg_humid.toFixed(1)}% • Max ${data.stats.max_humid.toFixed(1)}%`;
+            } else {
+                tempStats.textContent = '--';
+                humidStats.textContent = '--';
+            }
+
+            if (!data.readings || data.readings.length === 0) {
+                overlay.style.display = 'flex';
+                countLabel.textContent = '0 readings found in selected window';
+                historyChart.data.labels = [];
+                historyChart.data.datasets[0].data = [];
+                historyChart.data.datasets[1].data = [];
+                historyChart.update();
+
+                document.getElementById('tableContainer').innerHTML = `
+                    <div class="no-data">
+                        <div class="no-data-icon">📡</div>
+                        <div class="no-data-text">No sensor readings found in this time range.</div>
+                        <div class="no-data-sub">Select a broader date range or return to live view.</div>
+                    </div>
+                `;
+                return;
+            }
+
+            overlay.style.display = 'none';
+
+            // Readings count label
+            if (data.is_sampled) {
+                countLabel.textContent = `Showing ${data.count.toLocaleString()} points (sampled from ${data.total_matching.toLocaleString()} readings)`;
+            } else {
+                countLabel.textContent = `Showing ${data.count.toLocaleString()} readings`;
+            }
+
+            // Reverse readings for chart (oldest → newest)
+            const chronological = [...data.readings].reverse();
+            currentRawTimestamps = chronological.map(r => r.timestamp);
+
+            // Compute span for dynamic x-axis label formatting
+            const firstTime = new Date(chronological[0].timestamp).getTime();
+            const lastTime = new Date(chronological[chronological.length - 1].timestamp).getTime();
+            const spanHours = (lastTime - firstTime) / (1000 * 3600);
+
+            historyChart.data.labels = chronological.map(r => formatChartLabel(new Date(r.timestamp), spanHours));
+            historyChart.data.datasets[0].data = chronological.map(r => r.temperature);
+            historyChart.data.datasets[1].data = chronological.map(r => r.humidity);
+            historyChart.update('none');
+
+            // Update table (newest first, up to 20)
+            const rows = data.readings.slice(0, 20).map(r => `
+                <tr>
+                    <td>${formatDateTime(r.timestamp)}</td>
+                    <td>${r.temperature.toFixed(2)} °C</td>
+                    <td>${r.humidity.toFixed(2)} %</td>
+                    <td style="color: var(--text-muted)">#${r.id}</td>
+                </tr>
+            `).join('');
+
+            document.getElementById('tableContainer').innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Temperature</th>
+                            <th>Humidity</th>
+                            <th>ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        // ─── Preset Selection ─── 
+        function selectPreset(key) {
+            rangeMode = 'preset';
+            currentPreset = key;
+
+            const panel = document.getElementById('customRangePanel');
+            panel.classList.remove('open');
+
+            document.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
+            const activeBtn = document.getElementById('btnPreset' + key);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            restartChartPolling();
             fetchHistory();
         }
-        
-        // ─── Polling ─── 
-        function startPolling() {
-            fetchLatest();
+
+        // ─── Custom Range Drawer & Validation ─── 
+        function toggleCustomRange() {
+            const panel = document.getElementById('customRangePanel');
+            const isOpen = panel.classList.contains('open');
+
+            if (isOpen && rangeMode !== 'custom') {
+                panel.classList.remove('open');
+            } else {
+                panel.classList.add('open');
+                const startInput = document.getElementById('customStart');
+                const endInput = document.getElementById('customEnd');
+                if (!startInput.value || !endInput.value) {
+                    const now = new Date();
+                    const yesterday = new Date(now.getTime() - 24 * 3600 * 1000);
+                    startInput.value = toLocalInputString(yesterday);
+                    endInput.value = toLocalInputString(now);
+                }
+            }
+        }
+
+        function applyCustomRange() {
+            const startVal = document.getElementById('customStart').value;
+            const endVal = document.getElementById('customEnd').value;
+            const errorEl = document.getElementById('rangeErrorMsg');
+
+            if (!startVal) {
+                errorEl.textContent = 'Please choose a start date & time.';
+                errorEl.style.display = 'block';
+                return;
+            }
+            if (!endVal) {
+                errorEl.textContent = 'Please choose an end date & time.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            const startDate = new Date(startVal);
+            const endDate = new Date(endVal);
+
+            if (startDate >= endDate) {
+                errorEl.textContent = 'Start time must be before end time.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            errorEl.style.display = 'none';
+            rangeMode = 'custom';
+            customStartDate = startVal;
+            customEndDate = endVal;
+
+            document.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('btnCustomRange').classList.add('active');
+
+            stopChartPolling();
             fetchHistory();
-            pollInterval = setInterval(() => {
-                fetchLatest();
-                fetchHistory();
-            }, 3000); // Poll every 3 seconds (faster than ESP32's 5s interval)
+        }
+
+        function setCustomShortcut(shortcut) {
+            const now = new Date();
+            let start;
+            let end = now;
+
+            if (shortcut === 'today') {
+                start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            } else if (shortcut === 'yesterday') {
+                start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+                end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+            } else if (shortcut === '7d') {
+                start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+            }
+
+            document.getElementById('customStart').value = toLocalInputString(start);
+            document.getElementById('customEnd').value = toLocalInputString(end);
+            applyCustomRange();
+        }
+
+        function resetToLive() {
+            selectPreset('20');
+        }
+
+        // ─── Polling Management ─── 
+        function startLivePolling() {
+            fetchLatest();
+            if (liveGaugeInterval) clearInterval(liveGaugeInterval);
+            liveGaugeInterval = setInterval(fetchLatest, 3000);
+        }
+
+        function restartChartPolling() {
+            stopChartPolling();
+            if (rangeMode === 'preset') {
+                const config = PRESETS[currentPreset] || PRESETS['20'];
+                if (config.isLive && config.refreshMs) {
+                    chartPollInterval = setInterval(fetchHistory, config.refreshMs);
+                }
+            }
+        }
+
+        function stopChartPolling() {
+            if (chartPollInterval) {
+                clearInterval(chartPollInterval);
+                chartPollInterval = null;
+            }
         }
         
         // ─── Init ─── 
         document.addEventListener('DOMContentLoaded', () => {
             initChart();
-            startPolling();
+            startLivePolling();
+            selectPreset('20');
         });
     </script>
 </body>

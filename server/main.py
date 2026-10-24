@@ -17,9 +17,17 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
+from typing import Optional
 import os
 
-from database import init_db, insert_reading, get_latest_reading, get_recent_readings, get_reading_count
+from database import (
+    init_db,
+    insert_reading,
+    get_latest_reading,
+    get_recent_readings,
+    get_reading_count,
+    get_readings_by_range
+)
 from models import SensorReading, SensorReadingResponse, LatestReadingResponse
 
 
@@ -94,10 +102,31 @@ async def latest_reading():
 
 
 @app.get("/api/readings/history")
-async def reading_history(limit: int = 100):
-    """Get recent readings for the dashboard chart and table."""
-    readings = await get_recent_readings(limit)
-    return {"readings": readings, "count": len(readings)}
+async def reading_history(
+    limit: Optional[int] = None,
+    hours: Optional[float] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    max_points: int = 1200
+):
+    """
+    Get readings for the dashboard chart and table.
+    Supports:
+      - limit: e.g. limit=20 or limit=100
+      - hours: e.g. hours=1, hours=24, hours=48 (2 days)
+      - custom range: start_time and/or end_time (ISO format or YYYY-MM-DDTHH:MM)
+      - max_points: maximum points to return for graph smoothness (default 1200)
+    """
+    if limit is None and hours is None and start_time is None and end_time is None:
+        limit = 100
+
+    return await get_readings_by_range(
+        start_time=start_time,
+        end_time=end_time,
+        hours=hours,
+        limit=limit,
+        max_points=max_points
+    )
 
 
 # ─── Dashboard Route ─────────────────────────────────────────
