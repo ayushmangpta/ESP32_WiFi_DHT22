@@ -265,3 +265,65 @@ async def get_readings_by_range(
             "stats": stats
         }
 
+
+async def delete_readings(
+    clear_all: bool = False,
+    hours: Optional[float] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None
+) -> int:
+    """
+    Delete readings from the database.
+    Supports:
+      - clear_all: delete all readings
+      - hours: delete readings newer than (now - hours) [e.g. last 1h or last 24h]
+      - start_time and/or end_time: delete readings within custom date range
+    Returns number of deleted rows.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        if clear_all:
+            async with db.execute("SELECT COUNT(*) FROM readings") as count_cursor:
+                row = await count_cursor.fetchone()
+                deleted_count = row[0] if row else 0
+
+            await db.execute("DELETE FROM readings")
+            try:
+                await db.execute("DELETE FROM sqlite_sequence WHERE name='readings'")
+            except Exception:
+                pass
+            await db.commit()
+            return deleted_count
+
+        conditions = []
+        params = []
+
+        if hours is not None and hours > 0:
+            cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+            conditions.append("timestamp >= ?")
+            params.append(cutoff)
+        else:
+            if start_time:
+                norm_start = normalize_timestamp_input(start_time, is_end=False)
+                conditions.append("timestamp >= ?")
+                params.append(norm_start)
+            if end_time:
+                norm_end = normalize_timestamp_input(end_time, is_end=True)
+                conditions.append("timestamp <= ?")
+                params.append(norm_end)
+
+        if not conditions:
+            return 0
+
+        where_clause = f"WHERE {' AND '.join(conditions)}"
+
+        # Count rows to be deleted
+        count_query = f"SELECT COUNT(*) FROM readings {where_clause}"
+        async with db.execute(count_query, params) as count_cursor:
+            row = await count_cursor.fetchone()
+            deleted_count = row[0] if row else 0
+
+        await db.execute(f"DELETE FROM readings {where_clause}", params)
+        await db.commit()
+        return deleted_count
+
+

@@ -1,20 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ESP32 Sensor Dashboard — Temperature &amp; Humidity</title>
-    <meta name="description" content="Real-time temperature and humidity monitoring dashboard for ESP32 DHT22 sensor logger">
-    
+    <meta name="description"
+        content="Real-time temperature and humidity monitoring dashboard for ESP32 DHT22 sensor logger">
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
     <!-- Chart.js for history graph -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
-    
+
     <style>
         /* ─── CSS Custom Properties (Design Tokens) ─── */
         :root {
@@ -24,49 +27,57 @@
             --bg-card-hover: rgba(31, 41, 55, 0.8);
             --border-color: rgba(75, 85, 99, 0.3);
             --border-glow: rgba(99, 102, 241, 0.2);
-            
+
             --text-primary: #f9fafb;
             --text-secondary: #9ca3af;
             --text-muted: #6b7280;
-            
+
             --accent-indigo: #818cf8;
             --accent-indigo-dim: rgba(129, 140, 248, 0.1);
-            
+
             --temp-gradient-start: #f97316;
             --temp-gradient-end: #ef4444;
             --temp-color: #fb923c;
             --temp-bg: rgba(249, 115, 22, 0.08);
-            
+
             --humid-gradient-start: #06b6d4;
             --humid-gradient-end: #3b82f6;
             --humid-color: #22d3ee;
             --humid-bg: rgba(6, 182, 212, 0.08);
-            
+
             --success-color: #34d399;
             --success-bg: rgba(52, 211, 153, 0.1);
             --warning-color: #fbbf24;
             --error-color: #f87171;
             --error-bg: rgba(248, 113, 113, 0.1);
-            
+
             --radius-sm: 8px;
             --radius-md: 12px;
             --radius-lg: 16px;
             --radius-xl: 20px;
-            
+
             --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--border-color);
             --shadow-glow-temp: 0 0 40px rgba(249, 115, 22, 0.15);
             --shadow-glow-humid: 0 0 40px rgba(6, 182, 212, 0.15);
-            
+
             --transition-fast: 0.15s ease;
             --transition-medium: 0.3s ease;
             --transition-slow: 0.5s ease;
         }
-        
+
         /* ─── Reset & Base ─── */
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        
-        html { scroll-behavior: smooth; }
-        
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
@@ -74,32 +85,37 @@
             min-height: 100vh;
             overflow-x: hidden;
         }
-        
+
         /* ─── Animated Background ─── */
         body::before {
             content: '';
             position: fixed;
             inset: 0;
-            background: 
+            background:
                 radial-gradient(ellipse 600px 400px at 20% 20%, rgba(99, 102, 241, 0.06), transparent),
                 radial-gradient(ellipse 500px 300px at 80% 80%, rgba(6, 182, 212, 0.05), transparent),
                 radial-gradient(ellipse 400px 400px at 50% 50%, rgba(249, 115, 22, 0.03), transparent);
             z-index: -1;
             animation: bgPulse 8s ease-in-out infinite alternate;
         }
-        
+
         @keyframes bgPulse {
-            0% { opacity: 0.6; }
-            100% { opacity: 1; }
+            0% {
+                opacity: 0.6;
+            }
+
+            100% {
+                opacity: 1;
+            }
         }
-        
+
         /* ─── Layout ─── */
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 24px 20px;
         }
-        
+
         /* ─── Header ─── */
         .header {
             display: flex;
@@ -109,13 +125,13 @@
             padding-bottom: 20px;
             border-bottom: 1px solid var(--border-color);
         }
-        
+
         .header-left {
             display: flex;
             align-items: center;
             gap: 16px;
         }
-        
+
         .logo-icon {
             width: 48px;
             height: 48px;
@@ -127,7 +143,7 @@
             font-size: 24px;
             box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
         }
-        
+
         .header h1 {
             font-size: 1.5rem;
             font-weight: 700;
@@ -137,13 +153,13 @@
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        
+
         .header-subtitle {
             font-size: 0.8rem;
             color: var(--text-muted);
             font-weight: 400;
         }
-        
+
         /* ─── Status Badge ─── */
         .status-badge {
             display: flex;
@@ -155,42 +171,51 @@
             font-weight: 500;
             transition: var(--transition-medium);
         }
-        
+
         .status-badge.connected {
             background: var(--success-bg);
             color: var(--success-color);
             border: 1px solid rgba(52, 211, 153, 0.2);
         }
-        
+
         .status-badge.disconnected {
             background: var(--error-bg);
             color: var(--error-color);
             border: 1px solid rgba(248, 113, 113, 0.2);
         }
-        
+
         .status-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
             animation: pulse 2s infinite;
         }
-        
+
         .connected .status-dot {
             background: var(--success-color);
             box-shadow: 0 0 8px var(--success-color);
         }
-        
+
         .disconnected .status-dot {
             background: var(--error-color);
             box-shadow: 0 0 8px var(--error-color);
             animation: none;
         }
-        
+
         @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.85); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(0.85);
+            }
         }
-        
+
         /* ─── Gauge Cards ─── */
         .gauge-grid {
             display: grid;
@@ -198,7 +223,7 @@
             gap: 24px;
             margin-bottom: 32px;
         }
-        
+
         .gauge-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -210,7 +235,7 @@
             position: relative;
             overflow: hidden;
         }
-        
+
         .gauge-card::before {
             content: '';
             position: absolute;
@@ -224,27 +249,27 @@
             pointer-events: none;
             transition: var(--transition-medium);
         }
-        
+
         .gauge-card:hover {
             transform: translateY(-2px);
             border-color: rgba(75, 85, 99, 0.5);
         }
-        
+
         .gauge-card.temp {
             box-shadow: var(--shadow-card), var(--shadow-glow-temp);
         }
-        
+
         .gauge-card.humid {
             box-shadow: var(--shadow-card), var(--shadow-glow-humid);
         }
-        
+
         .gauge-label {
             display: flex;
             align-items: center;
             gap: 10px;
             margin-bottom: 16px;
         }
-        
+
         .gauge-label-icon {
             width: 36px;
             height: 36px;
@@ -254,15 +279,15 @@
             justify-content: center;
             font-size: 18px;
         }
-        
+
         .temp .gauge-label-icon {
             background: var(--temp-bg);
         }
-        
+
         .humid .gauge-label-icon {
             background: var(--humid-bg);
         }
-        
+
         .gauge-label span {
             font-size: 0.85rem;
             font-weight: 500;
@@ -270,7 +295,7 @@
             text-transform: uppercase;
             letter-spacing: 0.08em;
         }
-        
+
         .gauge-value {
             font-size: 3.5rem;
             font-weight: 800;
@@ -279,33 +304,33 @@
             margin-bottom: 8px;
             transition: var(--transition-medium);
         }
-        
+
         .temp .gauge-value {
             background: linear-gradient(135deg, var(--temp-gradient-start), var(--temp-gradient-end));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        
+
         .humid .gauge-value {
             background: linear-gradient(135deg, var(--humid-gradient-start), var(--humid-gradient-end));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        
+
         .gauge-unit {
             font-size: 1.5rem;
             font-weight: 400;
             opacity: 0.7;
         }
-        
+
         .gauge-timestamp {
             font-size: 0.75rem;
             color: var(--text-muted);
             margin-top: 4px;
         }
-        
+
         /* ─── Stats Bar ─── */
         .stats-bar {
             display: grid;
@@ -313,7 +338,7 @@
             gap: 16px;
             margin-bottom: 32px;
         }
-        
+
         .stat-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -322,11 +347,11 @@
             backdrop-filter: blur(10px);
             transition: var(--transition-fast);
         }
-        
+
         .stat-card:hover {
             border-color: rgba(75, 85, 99, 0.5);
         }
-        
+
         .stat-label {
             font-size: 0.72rem;
             color: var(--text-muted);
@@ -335,17 +360,25 @@
             font-weight: 500;
             margin-bottom: 6px;
         }
-        
+
         .stat-value {
             font-size: 1.3rem;
             font-weight: 700;
             color: var(--text-primary);
         }
-        
-        .stat-value.accent-indigo { color: var(--accent-indigo); }
-        .stat-value.accent-success { color: var(--success-color); }
-        .stat-value.accent-warning { color: var(--warning-color); }
-        
+
+        .stat-value.accent-indigo {
+            color: var(--accent-indigo);
+        }
+
+        .stat-value.accent-success {
+            color: var(--success-color);
+        }
+
+        .stat-value.accent-warning {
+            color: var(--warning-color);
+        }
+
         /* ─── Chart Section ─── */
         .chart-section {
             background: var(--bg-card);
@@ -356,20 +389,20 @@
             backdrop-filter: blur(20px);
             box-shadow: var(--shadow-card);
         }
-        
+
         .chart-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 20px;
         }
-        
+
         .chart-title {
             font-size: 1rem;
             font-weight: 600;
             color: var(--text-primary);
         }
-        
+
         .chart-header {
             display: flex;
             align-items: center;
@@ -446,6 +479,347 @@
             transform: rotate(60deg);
         }
 
+        .btn-clear-history {
+            padding: 6px 12px;
+            border-radius: 100px;
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            background: rgba(248, 113, 113, 0.08);
+            color: #f87171;
+            font-size: 0.72rem;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .btn-clear-history:hover {
+            background: rgba(248, 113, 113, 0.2);
+            border-color: #ef4444;
+            color: #fca5a5;
+            box-shadow: 0 0 14px rgba(239, 68, 68, 0.3);
+            transform: translateY(-1px);
+        }
+
+        /* ─── Clear History Modal ─── */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: modalFadeIn 0.2s ease-out;
+        }
+
+        .modal-backdrop.active {
+            display: flex;
+        }
+
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes modalSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(16px) scale(0.97);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .modal-dialog {
+            background: #111827;
+            border: 1px solid rgba(75, 85, 99, 0.4);
+            border-radius: var(--radius-xl);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            width: 100%;
+            max-width: 520px;
+            overflow: hidden;
+            animation: modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(75, 85, 99, 0.3);
+        }
+
+        .modal-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .modal-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .modal-icon.danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .modal-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .modal-subtitle {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .modal-close-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px;
+            line-height: 1;
+            transition: var(--transition-fast);
+        }
+
+        .modal-close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 22px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .clear-options-label {
+            font-size: 0.76rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+        }
+
+        .clear-options-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .clear-option-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: var(--radius-md);
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .clear-option-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(99, 102, 241, 0.4);
+        }
+
+        .clear-option-card:has(input:checked) {
+            background: rgba(99, 102, 241, 0.08);
+            border-color: var(--accent-indigo);
+            box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
+        }
+
+        .clear-option-card.danger-card:hover {
+            border-color: rgba(239, 68, 68, 0.4);
+        }
+
+        .clear-option-card.danger-card:has(input:checked) {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+        }
+
+        .clear-option-card input[type="radio"] {
+            accent-color: var(--accent-indigo);
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .clear-option-card.danger-card input[type="radio"] {
+            accent-color: #ef4444;
+        }
+
+        .clear-option-content {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .clear-option-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .clear-option-desc {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .clear-custom-fields {
+            display: flex;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            margin-top: 4px;
+            flex-wrap: wrap;
+        }
+
+        .clear-warning-box {
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #fbbf24;
+            font-size: 0.74rem;
+            line-height: 1.4;
+            transition: var(--transition-fast);
+        }
+
+        .clear-warning-box.danger {
+            background: rgba(239, 68, 68, 0.12);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+        }
+
+        .clear-error-box {
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            background: var(--error-bg);
+            border: 1px solid rgba(248, 113, 113, 0.4);
+            color: var(--error-color);
+            font-size: 0.75rem;
+        }
+
+        .modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 16px 24px;
+            border-top: 1px solid rgba(75, 85, 99, 0.3);
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-cancel {
+            padding: 8px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .btn-cancel:hover {
+            color: var(--text-primary);
+            border-color: var(--text-muted);
+        }
+
+        .btn-confirm-delete {
+            padding: 8px 20px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #ffffff;
+            font-size: 0.82rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+            transition: var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-confirm-delete:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(239, 68, 68, 0.5);
+        }
+
+        /* ─── Toast Notification ─── */
+        .toast-notification {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(17, 24, 39, 0.95);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 12px 18px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.82rem;
+            color: var(--text-primary);
+            z-index: 2000;
+            opacity: 0;
+            transform: translateY(12px);
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: blur(12px);
+        }
+
+        .toast-notification.show {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .toast-notification.success {
+            border-color: rgba(52, 211, 153, 0.4);
+            color: var(--success-color);
+        }
+
+        .toast-notification.error {
+            border-color: rgba(239, 68, 68, 0.4);
+            color: var(--error-color);
+        }
+
         /* ─── Custom Date Range Drawer ─── */
         .custom-range-panel {
             display: none;
@@ -463,8 +837,15 @@
         }
 
         @keyframes fadeInDown {
-            from { opacity: 0; transform: translateY(-8px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .custom-range-grid {
@@ -724,7 +1105,7 @@
             z-index: 5;
             backdrop-filter: blur(4px);
         }
-        
+
         /* ─── History Table ─── */
         .table-section {
             background: var(--bg-card);
@@ -734,19 +1115,19 @@
             backdrop-filter: blur(20px);
             box-shadow: var(--shadow-card);
         }
-        
+
         .table-title {
             font-size: 1rem;
             font-weight: 600;
             margin-bottom: 20px;
         }
-        
+
         table {
             width: 100%;
             border-collapse: separate;
             border-spacing: 0;
         }
-        
+
         thead th {
             text-align: left;
             font-size: 0.72rem;
@@ -757,79 +1138,113 @@
             padding: 12px 16px;
             border-bottom: 1px solid var(--border-color);
         }
-        
+
         tbody tr {
             transition: var(--transition-fast);
         }
-        
+
         tbody tr:hover {
             background: rgba(255, 255, 255, 0.02);
         }
-        
+
         tbody td {
             padding: 12px 16px;
             font-size: 0.85rem;
             color: var(--text-secondary);
             border-bottom: 1px solid rgba(75, 85, 99, 0.15);
         }
-        
+
         tbody td:nth-child(2) {
             color: var(--temp-color);
             font-weight: 600;
         }
-        
+
         tbody td:nth-child(3) {
             color: var(--humid-color);
             font-weight: 600;
         }
-        
+
         .no-data {
             text-align: center;
             padding: 48px 0;
             color: var(--text-muted);
         }
-        
+
         .no-data-icon {
             font-size: 48px;
             margin-bottom: 16px;
             opacity: 0.4;
         }
-        
+
         .no-data-text {
             font-size: 0.9rem;
             margin-bottom: 4px;
         }
-        
+
         .no-data-sub {
             font-size: 0.75rem;
         }
-        
+
         /* ─── Value Animation ─── */
         @keyframes valueUpdate {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.04); }
-            100% { transform: scale(1); }
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.04);
+            }
+
+            100% {
+                transform: scale(1);
+            }
         }
-        
+
         .value-updated {
             animation: valueUpdate 0.4s ease;
         }
-        
+
         /* ─── Responsive ─── */
         @media (max-width: 768px) {
-            .gauge-grid { grid-template-columns: 1fr; }
-            .stats-bar { grid-template-columns: 1fr; }
-            .gauge-value { font-size: 2.5rem; }
-            .header { flex-direction: column; gap: 12px; align-items: flex-start; }
+            .gauge-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-bar {
+                grid-template-columns: 1fr;
+            }
+
+            .gauge-value {
+                font-size: 2.5rem;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
+            }
         }
-        
+
         /* ─── Scrollbar ─── */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <!-- Header -->
@@ -846,7 +1261,7 @@
                 <span id="statusText">Waiting for data…</span>
             </div>
         </header>
-        
+
         <!-- Gauge Cards -->
         <div class="gauge-grid">
             <div class="gauge-card temp" id="tempCard">
@@ -857,7 +1272,7 @@
                 <div class="gauge-value" id="tempValue">--<span class="gauge-unit"> °C</span></div>
                 <div class="gauge-timestamp" id="tempTimestamp">No data yet</div>
             </div>
-            
+
             <div class="gauge-card humid" id="humidCard">
                 <div class="gauge-label">
                     <div class="gauge-label-icon">💧</div>
@@ -867,7 +1282,7 @@
                 <div class="gauge-timestamp" id="humidTimestamp">No data yet</div>
             </div>
         </div>
-        
+
         <!-- Stats Bar -->
         <div class="stats-bar">
             <div class="stat-card">
@@ -883,7 +1298,7 @@
                 <div class="stat-value accent-warning">5s</div>
             </div>
         </div>
-        
+
         <!-- Chart -->
         <div class="chart-section">
             <div class="chart-header">
@@ -897,6 +1312,8 @@
                         <button class="chart-btn" id="btnCustomRange" onclick="toggleCustomRange()">📅 Custom</button>
                     </div>
                     <button class="btn-refresh-icon" onclick="fetchHistory()" title="Refresh Graph Data">↻</button>
+                    <button class="btn-clear-history" onclick="openClearModal()" title="Clear sensor history">🗑️ Clear
+                        History</button>
                 </div>
             </div>
 
@@ -921,8 +1338,10 @@
                 <div class="quick-presets-row">
                     <span>Quick Shortcuts:</span>
                     <button type="button" class="quick-preset-link" onclick="setCustomShortcut('today')">Today</button>
-                    <button type="button" class="quick-preset-link" onclick="setCustomShortcut('yesterday')">Yesterday</button>
-                    <button type="button" class="quick-preset-link" onclick="setCustomShortcut('7d')">Past 7 Days</button>
+                    <button type="button" class="quick-preset-link"
+                        onclick="setCustomShortcut('yesterday')">Yesterday</button>
+                    <button type="button" class="quick-preset-link" onclick="setCustomShortcut('7d')">Past 7
+                        Days</button>
                 </div>
                 <div class="range-error-msg" id="rangeErrorMsg"></div>
             </div>
@@ -935,7 +1354,8 @@
                         <span id="rangeModeText">LIVE AUTO-REFRESH</span>
                     </span>
                     <span class="range-count-label" id="rangeCountLabel">Loading readings…</span>
-                    <button class="btn-resume-live" id="btnResumeLive" style="display: none;" onclick="resetToLive()">Resume Live ⚡</button>
+                    <button class="btn-resume-live" id="btnResumeLive" style="display: none;"
+                        onclick="resetToLive()">Resume Live ⚡</button>
                 </div>
                 <div class="chart-meta-right">
                     <div class="stat-pill temp-pill" id="tempStatsPill" title="Temperature Range for this time window">
@@ -955,16 +1375,24 @@
                 <canvas id="historyChart"></canvas>
                 <div class="chart-empty-overlay" id="chartEmptyOverlay">
                     <div class="no-data-icon" style="font-size:36px; margin-bottom:8px;">📊</div>
-                    <div class="no-data-text" id="chartEmptyText" style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">No readings recorded in this time range</div>
-                    <div class="no-data-sub" style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">Try selecting a wider date range or switch back to live mode.</div>
-                    <button class="btn-apply-range" style="font-size:0.75rem; padding:6px 14px;" onclick="resetToLive()">Switch to Live (Last 20)</button>
+                    <div class="no-data-text" id="chartEmptyText"
+                        style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">No readings recorded in
+                        this time range</div>
+                    <div class="no-data-sub" style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">Try
+                        selecting a wider date range or switch back to live mode.</div>
+                    <button class="btn-apply-range" style="font-size:0.75rem; padding:6px 14px;"
+                        onclick="resetToLive()">Switch to Live (Last 20)</button>
                 </div>
             </div>
         </div>
-        
+
         <!-- History Table -->
         <div class="table-section">
-            <div class="table-title">📋 Sensor Readings Log</div>
+            <div
+                style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                <div class="table-title" style="margin-bottom: 0;">📋 Sensor Readings Log</div>
+                <button class="btn-clear-history" onclick="openClearModal()">🗑️ Clear History</button>
+            </div>
             <div id="tableContainer">
                 <div class="no-data" id="noData">
                     <div class="no-data-icon">📡</div>
@@ -974,7 +1402,90 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- Clear History Modal Dialog -->
+    <div class="modal-backdrop" id="clearModalBackdrop" onclick="handleBackdropClick(event)">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="modal-icon danger">🗑️</div>
+                    <div>
+                        <div class="modal-title">Clear Sensor History</div>
+                        <div class="modal-subtitle">Permanently delete stored temperature &amp; humidity records</div>
+                    </div>
+                </div>
+                <button class="modal-close-btn" onclick="closeClearModal()" title="Close">&times;</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="clear-options-label">Select what to clear:</div>
+
+                <div class="clear-options-grid">
+                    <!-- Preset: Last 1 Hour -->
+                    <label class="clear-option-card">
+                        <input type="radio" name="clearScope" value="1h" checked onchange="onClearOptionChange()">
+                        <div class="clear-option-content">
+                            <div class="clear-option-title">Last 1 Hour</div>
+                            <div class="clear-option-desc">Delete readings recorded within the past 60 minutes</div>
+                        </div>
+                    </label>
+
+                    <!-- Preset: Last 1 Day (24 Hours) -->
+                    <label class="clear-option-card">
+                        <input type="radio" name="clearScope" value="24h" onchange="onClearOptionChange()">
+                        <div class="clear-option-content">
+                            <div class="clear-option-title">Last 1 Day (24 Hours)</div>
+                            <div class="clear-option-desc">Delete readings recorded within the past 24 hours</div>
+                        </div>
+                    </label>
+
+                    <!-- Custom Range -->
+                    <label class="clear-option-card">
+                        <input type="radio" name="clearScope" value="custom" onchange="onClearOptionChange()">
+                        <div class="clear-option-content">
+                            <div class="clear-option-title">📅 Custom Date Range</div>
+                            <div class="clear-option-desc">Delete readings between a specific start and end time</div>
+                        </div>
+                    </label>
+
+                    <!-- Clear All History -->
+                    <label class="clear-option-card danger-card">
+                        <input type="radio" name="clearScope" value="all" onchange="onClearOptionChange()">
+                        <div class="clear-option-content">
+                            <div class="clear-option-title">⚠️ Clear All History</div>
+                            <div class="clear-option-desc">Wipe all stored records and reset reading counter to 0</div>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Custom Range Inputs (visible only when 'custom' selected) -->
+                <div class="clear-custom-fields" id="clearCustomFields" style="display: none;">
+                    <div class="custom-field">
+                        <label for="clearStartInput">📅 From (Start):</label>
+                        <input type="datetime-local" id="clearStartInput">
+                    </div>
+                    <div class="custom-field">
+                        <label for="clearEndInput">📅 To (End):</label>
+                        <input type="datetime-local" id="clearEndInput">
+                    </div>
+                </div>
+
+                <div class="clear-warning-box" id="clearWarningBox">
+                    ⚠️ Readings logged in the last 1 hour will be permanently deleted from SQLite (sensor_data.db).
+                </div>
+
+                <div class="clear-error-box" id="clearErrorBox" style="display: none;"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeClearModal()">Cancel</button>
+                <button class="btn-confirm-delete" id="btnConfirmDelete" onclick="executeClearHistory()">
+                    <span>🗑️ Delete Last 1 Hour</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ─── State ─── 
         let rangeMode = 'preset';      // 'preset' or 'custom'
@@ -988,10 +1499,10 @@
         let currentRawTimestamps = [];
 
         const PRESETS = {
-            '20':  { label: 'Last 20',      query: 'limit=20', refreshMs: 3000, isLive: true },
-            '1h':  { label: 'Last 1 Hour',   query: 'hours=1',  refreshMs: 5000, isLive: true },
+            '20': { label: 'Last 20', query: 'limit=20', refreshMs: 3000, isLive: true },
+            '1h': { label: 'Last 1 Hour', query: 'hours=1', refreshMs: 5000, isLive: true },
             '24h': { label: 'Last 24 Hours', query: 'hours=24', refreshMs: 15000, isLive: true },
-            '2d':  { label: 'Last 2 Days',   query: 'hours=48', refreshMs: 20000, isLive: true }
+            '2d': { label: 'Last 2 Days', query: 'hours=48', refreshMs: 20000, isLive: true }
         };
 
         function toLocalInputString(date) {
@@ -1007,15 +1518,15 @@
         // ─── Chart Setup ─── 
         function initChart() {
             const ctx = document.getElementById('historyChart').getContext('2d');
-            
+
             const tempGradient = ctx.createLinearGradient(0, 0, 0, 280);
             tempGradient.addColorStop(0, 'rgba(249, 115, 22, 0.25)');
             tempGradient.addColorStop(1, 'rgba(249, 115, 22, 0)');
-            
+
             const humidGradient = ctx.createLinearGradient(0, 0, 0, 280);
             humidGradient.addColorStop(0, 'rgba(6, 182, 212, 0.2)');
             humidGradient.addColorStop(1, 'rgba(6, 182, 212, 0)');
-            
+
             historyChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -1088,7 +1599,7 @@
                             displayColors: true,
                             boxPadding: 4,
                             callbacks: {
-                                title: function(items) {
+                                title: function (items) {
                                     if (!items || !items.length) return '';
                                     const idx = items[0].dataIndex;
                                     const rawIso = currentRawTimestamps[idx];
@@ -1097,7 +1608,7 @@
                                     }
                                     return items[0].label;
                                 },
-                                label: function(context) {
+                                label: function (context) {
                                     let label = context.dataset.label || '';
                                     if (label) label += ': ';
                                     if (context.parsed.y !== null) {
@@ -1150,7 +1661,7 @@
                 }
             });
         }
-        
+
         // ─── Format timestamps ─── 
         function formatDateTime(isoString) {
             try {
@@ -1168,7 +1679,7 @@
             try {
                 if (spanHours > 24) {
                     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-                           d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                        d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
                 } else if (spanHours > 2) {
                     return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
                 } else {
@@ -1178,7 +1689,7 @@
                 return '';
             }
         }
-        
+
         // ─── Update Status ─── 
         function setStatus(connected, text) {
             const badge = document.getElementById('statusBadge');
@@ -1186,48 +1697,48 @@
             badge.className = 'status-badge ' + (connected ? 'connected' : 'disconnected');
             statusText.textContent = text;
         }
-        
+
         // ─── Animate Value ─── 
         function animateValue(el) {
             el.classList.remove('value-updated');
             void el.offsetWidth;
             el.classList.add('value-updated');
         }
-        
+
         // ─── Update Latest Reading (Real-time gauges) ─── 
         async function fetchLatest() {
             try {
                 const res = await fetch('/api/readings/latest');
                 const data = await res.json();
-                
+
                 if (data.status === 'no_data' || !data.id) {
                     setStatus(false, 'Waiting for data…');
                     return;
                 }
-                
+
                 const tempEl = document.getElementById('tempValue');
                 const humidEl = document.getElementById('humidValue');
-                
+
                 tempEl.innerHTML = data.temperature.toFixed(1) + '<span class="gauge-unit"> °C</span>';
                 humidEl.innerHTML = data.humidity.toFixed(1) + '<span class="gauge-unit"> %</span>';
-                
+
                 if (data.id !== lastReadingId) {
                     animateValue(tempEl);
                     animateValue(humidEl);
                     lastReadingId = data.id;
                 }
-                
+
                 const timeStr = formatDateTime(data.timestamp);
                 document.getElementById('tempTimestamp').textContent = 'Last updated: ' + timeStr;
                 document.getElementById('humidTimestamp').textContent = 'Last updated: ' + timeStr;
-                
+
                 document.getElementById('totalReadings').textContent = data.total_readings.toLocaleString();
-                
+
                 setStatus(true, 'Receiving data');
                 document.getElementById('serverStatus').textContent = 'Online';
                 document.getElementById('serverStatus').className = 'stat-value accent-success';
                 document.getElementById('serverStatus').style.color = '';
-                
+
             } catch (err) {
                 console.error('Failed to fetch latest:', err);
                 setStatus(false, 'Server unreachable');
@@ -1250,7 +1761,7 @@
             try {
                 const res = await fetch(url);
                 const data = await res.json();
-                
+
                 renderHistory(data);
             } catch (err) {
                 console.error('Failed to fetch history:', err);
@@ -1471,7 +1982,158 @@
                 chartPollInterval = null;
             }
         }
-        
+
+        // ─── Clear History Logic ─── 
+        function openClearModal() {
+            const modal = document.getElementById('clearModalBackdrop');
+            modal.classList.add('active');
+
+            const radio1h = document.querySelector('input[name="clearScope"][value="1h"]');
+            if (radio1h) radio1h.checked = true;
+            onClearOptionChange();
+
+            const now = new Date();
+            const oneDayAgo = new Date(now.getTime() - 24 * 3600 * 1000);
+            const startInput = document.getElementById('clearStartInput');
+            const endInput = document.getElementById('clearEndInput');
+            if (startInput && !startInput.value) startInput.value = toLocalInputString(oneDayAgo);
+            if (endInput && !endInput.value) endInput.value = toLocalInputString(now);
+
+            document.getElementById('clearErrorBox').style.display = 'none';
+        }
+
+        function closeClearModal() {
+            const modal = document.getElementById('clearModalBackdrop');
+            modal.classList.remove('active');
+        }
+
+        function handleBackdropClick(e) {
+            if (e.target.id === 'clearModalBackdrop') {
+                closeClearModal();
+            }
+        }
+
+        function onClearOptionChange() {
+            const selected = document.querySelector('input[name="clearScope"]:checked').value;
+            const customFields = document.getElementById('clearCustomFields');
+            const warningBox = document.getElementById('clearWarningBox');
+            const confirmBtn = document.getElementById('btnConfirmDelete');
+
+            if (selected === 'custom') {
+                customFields.style.display = 'flex';
+                warningBox.textContent = '⚠️ All readings within the specified date/time window will be permanently deleted.';
+                warningBox.className = 'clear-warning-box';
+                confirmBtn.innerHTML = '<span>🗑️ Delete Custom Range</span>';
+            } else if (selected === 'all') {
+                customFields.style.display = 'none';
+                warningBox.textContent = '🚨 WARNING: This will permanently erase ALL sensor readings from the SQLite database. Total readings will be reset to 0.';
+                warningBox.className = 'clear-warning-box danger';
+                confirmBtn.innerHTML = '<span>⚠️ Wipe All History</span>';
+            } else if (selected === '1h') {
+                customFields.style.display = 'none';
+                warningBox.textContent = '⚠️ Readings logged in the last 1 hour will be permanently deleted from SQLite (sensor_data.db).';
+                warningBox.className = 'clear-warning-box';
+                confirmBtn.innerHTML = '<span>🗑️ Delete Last 1 Hour</span>';
+            } else if (selected === '24h') {
+                customFields.style.display = 'none';
+                warningBox.textContent = '⚠️ Readings logged in the last 24 hours (1 day) will be permanently deleted from SQLite (sensor_data.db).';
+                warningBox.className = 'clear-warning-box';
+                confirmBtn.innerHTML = '<span>🗑️ Delete Last 1 Day</span>';
+            }
+        }
+
+        async function executeClearHistory() {
+            const selected = document.querySelector('input[name="clearScope"]:checked').value;
+            const errorBox = document.getElementById('clearErrorBox');
+            const confirmBtn = document.getElementById('btnConfirmDelete');
+            errorBox.style.display = 'none';
+
+            let payload = {
+                clear_all: false,
+                hours: null,
+                start_time: null,
+                end_time: null
+            };
+
+            if (selected === 'all') {
+                payload.clear_all = true;
+            } else if (selected === '1h') {
+                payload.hours = 1;
+            } else if (selected === '24h') {
+                payload.hours = 24;
+            } else if (selected === 'custom') {
+                const startVal = document.getElementById('clearStartInput').value;
+                const endVal = document.getElementById('clearEndInput').value;
+                if (!startVal || !endVal) {
+                    errorBox.textContent = 'Please choose both a start and end date/time.';
+                    errorBox.style.display = 'block';
+                    return;
+                }
+                if (new Date(startVal) >= new Date(endVal)) {
+                    errorBox.textContent = 'Start time must be before end time.';
+                    errorBox.style.display = 'block';
+                    return;
+                }
+                payload.start_time = startVal;
+                payload.end_time = endVal;
+            }
+
+            confirmBtn.disabled = true;
+            confirmBtn.style.opacity = '0.6';
+
+            try {
+                const res = await fetch('/api/readings/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    closeClearModal();
+                    showToast(data.message, 'success');
+
+                    // Refresh live data and history chart immediately
+                    await fetchLatest();
+                    await fetchHistory();
+                } else {
+                    errorBox.textContent = data.detail || 'Failed to clear history.';
+                    errorBox.style.display = 'block';
+                }
+            } catch (err) {
+                console.error('Error clearing history:', err);
+                errorBox.textContent = 'Server connection error.';
+                errorBox.style.display = 'block';
+            } finally {
+                confirmBtn.disabled = false;
+                confirmBtn.style.opacity = '1';
+            }
+        }
+
+        // ─── Toast Notifications ─── 
+        function showToast(message, type = 'success') {
+            let toast = document.getElementById('toastNotification');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'toastNotification';
+                toast.className = 'toast-notification';
+                document.body.appendChild(toast);
+            }
+            toast.className = 'toast-notification ' + type + ' show';
+            toast.innerHTML = `<span style="font-size: 16px;">${type === 'success' ? '✓' : '⚠️'}</span><span>${message}</span>`;
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 4500);
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeClearModal();
+            }
+        });
+
         // ─── Init ─── 
         document.addEventListener('DOMContentLoaded', () => {
             initChart();
@@ -1480,4 +2142,5 @@
         });
     </script>
 </body>
+
 </html>

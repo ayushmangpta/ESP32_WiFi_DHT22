@@ -32,3 +32,20 @@ class LatestReadingResponse(BaseModel):
     timestamp: Optional[str] = None
     total_readings: int = 0
     status: str = "ok"
+
+
+class ClearHistoryRequest(BaseModel):
+    """Request model for clearing history."""
+    clear_all: bool = False
+    hours: Optional[float] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+
+
+class ClearHistoryResponse(BaseModel):
+    """Response model after clearing history."""
+    status: str = "ok"
+    deleted_count: int
+    remaining_count: int
+    message: str
+

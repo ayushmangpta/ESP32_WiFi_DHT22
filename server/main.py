@@ -26,9 +26,16 @@ from database import (
     get_latest_reading,
     get_recent_readings,
     get_reading_count,
-    get_readings_by_range
+    get_readings_by_range,
+    delete_readings
 )
-from models import SensorReading, SensorReadingResponse, LatestReadingResponse
+from models import (
+    SensorReading,
+    SensorReadingResponse,
+    LatestReadingResponse,
+    ClearHistoryRequest,
+    ClearHistoryResponse
+)
 
 
 # ─── App Lifecycle ────────────────────────────────────────────
@@ -126,6 +133,41 @@ async def reading_history(
         hours=hours,
         limit=limit,
         max_points=max_points
+    )
+
+
+@app.post("/api/readings/clear", response_model=ClearHistoryResponse)
+@app.delete("/api/readings", response_model=ClearHistoryResponse)
+async def clear_history(req: ClearHistoryRequest):
+    """
+    Clear historical sensor readings.
+    Supports:
+      - clear_all: True (wipe all readings)
+      - hours: float (e.g. 1 for last 1 hour, 24 for last 24 hours)
+      - start_time & end_time (delete readings within custom date range)
+    """
+    deleted = await delete_readings(
+        clear_all=req.clear_all,
+        hours=req.hours,
+        start_time=req.start_time,
+        end_time=req.end_time
+    )
+    remaining = await get_reading_count()
+
+    if req.clear_all:
+        msg = f"All sensor history cleared ({deleted} records deleted)."
+    elif req.hours:
+        h_str = f"{int(req.hours)} hour" if req.hours == 1 else f"{int(req.hours)} hours" if req.hours.is_integer() else f"{req.hours} hours"
+        msg = f"Cleared {deleted} readings from the last {h_str}."
+    else:
+        msg = f"Cleared {deleted} readings within the specified date range."
+
+    print(f"  🗑️  Clear readings: {msg} [Remaining: {remaining}]")
+    return ClearHistoryResponse(
+        status="ok",
+        deleted_count=deleted,
+        remaining_count=remaining,
+        message=msg
     )
 
 
