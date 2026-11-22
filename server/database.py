@@ -1,12 +1,20 @@
 """
-Database module for ESP32 DHT22 Sensor Logger.
+Database module for ESP32 DHT22 Sensor Logger & Automation.
 
 Uses aiosqlite for async SQLite operations.
 The database file (sensor_data.db) is created automatically
-in the server/ directory. Restarting the server does NOT erase data.
+in the server/ directory.
+
+Tables:
+  - 'readings': ESP32 DHT22 sensor readings
+  - 'smart_plug_state': Current verified / last known state of each plug
+  - 'smart_plug_history': Audit log of all manual and automated plug commands
+  - 'automation_settings': Persistent key-value automation thresholds & schedule config
+  - 'automation_rules': Persistent relational condition rules for environmental control
 """
 
 import aiosqlite
+import sqlite3
 import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
@@ -14,13 +22,65 @@ from typing import Optional, Dict, Any, List
 # Database file path — same directory as this script
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sensor_data.db")
 
+# In-memory settings cache for instant synchronous access
+_SETTINGS_CACHE: Dict[str, Any] = {}
+
+# ─── Default Automation Definitions for SQL Seeding ────────────
+
+DEFAULT_SETTINGS_DEFINITIONS = [
+    ("enabled", "true", "bool", "Master toggle for automated smart plug actions"),
+    ("window_size", "30", "int", "Number of recent valid sensor readings for moving average"),
+    ("humidifier_humid_low", "93.0", "float", "Turn ON humidifier when average humidity drops below this %"),
+    ("humidifier_humid_high", "96.0", "float", "Turn OFF humidifier when average humidity exceeds this %"),
+    ("ac_temp_high", "26.0", "float", "Turn ON AC when average temperature exceeds this °C"),
+    ("ac_temp_low", "23.0", "float", "Turn OFF AC when average temperature drops below this °C"),
+    ("heater_temp_low", "22.0", "float", "Turn ON Space Heater when average temperature drops below this °C"),
+    ("heater_temp_high", "26.0", "float", "Target temperature for Space Heater (turns OFF at or above this °C)"),
+    ("fan_humid_trigger_threshold", "96.0", "float", "Trigger Fan ON when average humidity exceeds this %"),
+    ("fan_humidity_trigger_duration_mins", "3.0", "float", "Duration (mins) to run Fan when triggered by high humidity"),
+    ("fan_schedule_interval_hours", "4.0", "float", "Interval (hours) between periodic Fan ventilation cycles"),
+    ("fan_schedule_duration_mins", "5.0", "float", "Duration (mins) of periodic Fan ventilation cycles"),
+    ("sprinkler_schedule_interval_hours", "2.0", "float", "Interval (hours) between periodic Sprinkler irrigation cycles"),
+    ("sprinkler_schedule_duration_mins", "5.0", "float", "Duration (mins) of periodic Sprinkler irrigation cycles"),
+]
+
+DEFAULT_RULES_DEFINITIONS = [
+    ("humidifier_low", "humidifier", "threshold", "humidity", "<", 93.0, None, None, None, "If humidity < 93%, turn ON humidifier"),
+    ("humidifier_high", "humidifier", "threshold", "humidity", ">", 96.0, None, None, None, "If humidity > 96%, turn OFF humidifier"),
+    ("sprinkler_scheduled", "sprinkler", "schedule", "time", "interval", None, None, 5.0, 2.0, "Water sprinkler scheduled for 5 mins once every 2 hours"),
+    ("ac_high", "ac", "threshold", "temperature", ">", 26.0, None, None, None, "If temperature > 26°C, turn ON AC"),
+    ("ac_low", "ac", "threshold", "temperature", "<", 23.0, None, None, None, "If temperature < 23°C, turn OFF AC"),
+    ("heater_cold", "heater", "threshold", "temperature", "<", 22.0, 26.0, None, None, "If temperature < 22°C, turn ON heater until temp 26°C"),
+    ("fan_humidity", "fan", "threshold", "humidity", ">", 96.0, None, 3.0, None, "If humidity > 96%, turn ON fan for 3 mins"),
+    ("fan_scheduled", "fan", "schedule", "time", "interval", None, None, 5.0, 4.0, "Turn ON fan every 4 hours for 5 mins"),
+]
+
+
+def _parse_setting_value(val: str, vtype: str) -> Any:
+    """Cast database string representation to its Python data type."""
+    if vtype == "bool":
+        return val.lower() in ("true", "1", "yes")
+    elif vtype == "int":
+        try:
+            return int(float(val))
+        except (ValueError, TypeError):
+            return 0
+    elif vtype == "float":
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return 0.0
+    return val
+
 
 async def init_db():
     """
-    Create the database tables if they don't exist:
+    Create database tables if they do not exist:
     - 'readings': ESP32 DHT22 sensor readings
     - 'smart_plug_state': Current verified / last known state of each plug
     - 'smart_plug_history': Audit log of all manual and automated plug commands
+    - 'automation_settings': Persistent SQL table of automation thresholds and schedules
+    - 'automation_rules': Persistent SQL table of condition definitions
     """
     async with aiosqlite.connect(DB_PATH) as db:
         # 1. Sensor readings table
@@ -78,9 +138,190 @@ async def init_db():
             ON smart_plug_history (plug_name, created_at DESC)
         """)
 
-        await db.commit()
-    print(f"✓ Database ready at: {DB_PATH}")
+        # 4. Automation settings SQL table (thresholds & config)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS automation_settings (
+                key          TEXT PRIMARY KEY,
+                value        TEXT NOT NULL,
+                value_type   TEXT NOT NULL DEFAULT 'float',
+                description  TEXT,
+                updated_at   TEXT NOT NULL
+            )
+        """)
 
+        # 5. Automation rules SQL table (relational condition definitions)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS automation_rules (
+                rule_id        TEXT PRIMARY KEY,
+                device_name    TEXT NOT NULL,
+                rule_type      TEXT NOT NULL,
+                trigger_metric TEXT,
+                operator       TEXT,
+                threshold      REAL,
+                target_value   REAL,
+                duration_mins  REAL,
+                interval_hours REAL,
+                description    TEXT,
+                enabled        INTEGER NOT NULL DEFAULT 1,
+                updated_at     TEXT NOT NULL
+            )
+        """)
+
+        # Seed default settings into SQL table if not present (preserves user edits)
+        now_iso = datetime.now().isoformat()
+        for key, val, vtype, desc in DEFAULT_SETTINGS_DEFINITIONS:
+            await db.execute("""
+                INSERT OR IGNORE INTO automation_settings (key, value, value_type, description, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (key, val, vtype, desc, now_iso))
+
+        # Seed default rules into SQL table if not present
+        for rid, dname, rtype, metric, op, th, target, dur, interval, desc in DEFAULT_RULES_DEFINITIONS:
+            await db.execute("""
+                INSERT OR IGNORE INTO automation_rules (
+                    rule_id, device_name, rule_type, trigger_metric, operator,
+                    threshold, target_value, duration_mins, interval_hours, description, enabled, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            """, (rid, dname, rtype, metric, op, th, target, dur, interval, desc, now_iso))
+
+        await db.commit()
+
+    # Preload settings into cache
+    await get_db_automation_settings()
+    print(f"✓ Database ready at: {DB_PATH}")
+    print(f"✓ Automation rules & settings loaded from SQL table: {len(_SETTINGS_CACHE)} parameters active")
+
+
+# ─── Automation Settings SQL Operations ───────────────────────
+
+async def get_db_automation_settings() -> Dict[str, Any]:
+    """Retrieve all automation thresholds and parameters from the SQLite database."""
+    global _SETTINGS_CACHE
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT key, value, value_type FROM automation_settings") as cursor:
+            rows = await cursor.fetchall()
+            settings = {}
+            for row in rows:
+                settings[row["key"]] = _parse_setting_value(row["value"], row["value_type"])
+            _SETTINGS_CACHE = settings
+            return dict(_SETTINGS_CACHE)
+
+
+def get_cached_automation_settings() -> Dict[str, Any]:
+    """Synchronous getter for automation settings from memory cache or sqlite3 fallback."""
+    global _SETTINGS_CACHE
+    if _SETTINGS_CACHE:
+        return dict(_SETTINGS_CACHE)
+
+    # Fallback to direct synchronous sqlite3 query if called before async init_db
+    try:
+        if os.path.exists(DB_PATH):
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value, value_type FROM automation_settings")
+            rows = cursor.fetchall()
+            conn.close()
+            settings = {}
+            for row in rows:
+                settings[row["key"]] = _parse_setting_value(row["value"], row["value_type"])
+            if settings:
+                _SETTINGS_CACHE = settings
+                return dict(_SETTINGS_CACHE)
+    except Exception as e:
+        print(f"[database] Fallback sqlite3 query warning: {e}")
+
+    # Fallback to defaults if DB is completely uninitialized
+    fallback = {}
+    for key, val, vtype, _ in DEFAULT_SETTINGS_DEFINITIONS:
+        fallback[key] = _parse_setting_value(val, vtype)
+    return fallback
+
+
+async def update_db_automation_settings(updates: dict) -> Dict[str, Any]:
+    """
+    Update automation settings in the SQLite database table.
+    Also synchronizes corresponding rows in the automation_rules table.
+    """
+    global _SETTINGS_CACHE
+    now_iso = datetime.now().isoformat()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        for key, val in updates.items():
+            if val is None:
+                continue
+
+            str_val = str(val).lower() if isinstance(val, bool) else str(val)
+
+            # 1. Update key in automation_settings SQL table
+            await db.execute("""
+                UPDATE automation_settings
+                SET value = ?, updated_at = ?
+                WHERE key = ?
+            """, (str_val, now_iso, key))
+
+            # 2. Keep automation_rules table in sync
+            if key == "humidifier_humid_low":
+                await db.execute("UPDATE automation_rules SET threshold = ?, updated_at = ? WHERE rule_id = 'humidifier_low'", (float(val), now_iso))
+            elif key == "humidifier_humid_high":
+                await db.execute("UPDATE automation_rules SET threshold = ?, updated_at = ? WHERE rule_id = 'humidifier_high'", (float(val), now_iso))
+            elif key == "ac_temp_high":
+                await db.execute("UPDATE automation_rules SET threshold = ?, updated_at = ? WHERE rule_id = 'ac_high'", (float(val), now_iso))
+            elif key == "ac_temp_low":
+                await db.execute("UPDATE automation_rules SET threshold = ?, updated_at = ? WHERE rule_id = 'ac_low'", (float(val), now_iso))
+            elif key == "heater_temp_low":
+                await db.execute("UPDATE automation_rules SET threshold = ?, updated_at = ? WHERE rule_id = 'heater_cold'", (float(val), now_iso))
+            elif key == "heater_temp_high":
+                await db.execute("UPDATE automation_rules SET target_value = ?, updated_at = ? WHERE rule_id = 'heater_cold'", (float(val), now_iso))
+            elif key == "fan_humid_trigger_threshold":
+                await db.execute("UPDATE automation_rules SET threshold = ?, updated_at = ? WHERE rule_id = 'fan_humidity'", (float(val), now_iso))
+            elif key == "fan_humidity_trigger_duration_mins":
+                await db.execute("UPDATE automation_rules SET duration_mins = ?, updated_at = ? WHERE rule_id = 'fan_humidity'", (float(val), now_iso))
+            elif key == "fan_schedule_interval_hours":
+                await db.execute("UPDATE automation_rules SET interval_hours = ?, updated_at = ? WHERE rule_id = 'fan_scheduled'", (float(val), now_iso))
+            elif key == "fan_schedule_duration_mins":
+                await db.execute("UPDATE automation_rules SET duration_mins = ?, updated_at = ? WHERE rule_id = 'fan_scheduled'", (float(val), now_iso))
+            elif key == "sprinkler_schedule_interval_hours":
+                await db.execute("UPDATE automation_rules SET interval_hours = ?, updated_at = ? WHERE rule_id = 'sprinkler_scheduled'", (float(val), now_iso))
+            elif key == "sprinkler_schedule_duration_mins":
+                await db.execute("UPDATE automation_rules SET duration_mins = ?, updated_at = ? WHERE rule_id = 'sprinkler_scheduled'", (float(val), now_iso))
+            elif key == "enabled":
+                en_int = 1 if bool(val) else 0
+                await db.execute("UPDATE automation_rules SET enabled = ?, updated_at = ?", (en_int, now_iso))
+
+        await db.commit()
+
+    # Reload into cache
+    return await get_db_automation_settings()
+
+
+async def get_db_automation_rules() -> List[Dict[str, Any]]:
+    """Retrieve all structured automation rules from the SQLite database."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM automation_rules ORDER BY rule_id ASC") as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "rule_id": r["rule_id"],
+                    "device_name": r["device_name"],
+                    "rule_type": r["rule_type"],
+                    "trigger_metric": r["trigger_metric"],
+                    "operator": r["operator"],
+                    "threshold": r["threshold"],
+                    "target_value": r["target_value"],
+                    "duration_mins": r["duration_mins"],
+                    "interval_hours": r["interval_hours"],
+                    "description": r["description"],
+                    "enabled": bool(r["enabled"]),
+                    "updated_at": r["updated_at"]
+                }
+                for r in rows
+            ]
+
+
+# ─── Sensor Readings Database Operations ──────────────────────
 
 async def insert_reading(temperature: float, humidity: float) -> int:
     """
@@ -170,10 +411,7 @@ async def get_readings_by_range(
     limit: Optional[int] = None,
     max_points: int = 1200
 ) -> Dict[str, Any]:
-    """
-    Query readings by relative hours, absolute date range, or limit.
-    Includes aggregation statistics and intelligent sampling when data is large.
-    """
+    """Query readings by relative hours, absolute date range, or limit."""
     conditions = []
     params = []
 
@@ -196,14 +434,13 @@ async def get_readings_by_range(
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # If limit is specified and no time filters were provided, fetch latest `limit`
         if limit is not None and not conditions:
             async with db.execute(
                 "SELECT * FROM readings ORDER BY id DESC LIMIT ?",
                 (limit,)
             ) as cursor:
                 rows = await cursor.fetchall()
-            
+
             readings = [
                 {
                     "id": r["id"],
@@ -213,9 +450,9 @@ async def get_readings_by_range(
                 }
                 for r in rows
             ]
-            
+
             total_matching = len(readings)
-            
+
             if readings:
                 temps = [r["temperature"] for r in readings]
                 humids = [r["humidity"] for r in readings]
@@ -241,7 +478,7 @@ async def get_readings_by_range(
                 "stats": stats
             }
 
-        # Query stats across the matched range
+        # Query stats across matched range
         stats_query = f"""
             SELECT 
                 COUNT(*) as total_count,
@@ -275,7 +512,6 @@ async def get_readings_by_range(
                 "stats": stats
             }
 
-        # Query all matching readings (ordered newest first, matching API convention)
         query = f"SELECT * FROM readings {where_clause} ORDER BY id DESC"
         async with db.execute(query, params) as cursor:
             rows = await cursor.fetchall()
@@ -316,14 +552,7 @@ async def delete_readings(
     start_time: Optional[str] = None,
     end_time: Optional[str] = None
 ) -> int:
-    """
-    Delete readings from the database.
-    Supports:
-      - clear_all: delete all readings
-      - hours: delete readings newer than (now - hours) [e.g. last 1h or last 24h]
-      - start_time and/or end_time: delete readings within custom date range
-    Returns number of deleted rows.
-    """
+    """Delete readings from the database."""
     async with aiosqlite.connect(DB_PATH) as db:
         if clear_all:
             async with db.execute("SELECT COUNT(*) FROM readings") as count_cursor:
@@ -360,7 +589,6 @@ async def delete_readings(
 
         where_clause = f"WHERE {' AND '.join(conditions)}"
 
-        # Count rows to be deleted
         count_query = f"SELECT COUNT(*) FROM readings {where_clause}"
         async with db.execute(count_query, params) as count_cursor:
             row = await count_cursor.fetchone()
@@ -371,13 +599,10 @@ async def delete_readings(
         return deleted_count
 
 
-# ─── Smart Plug Database Operations ───
+# ─── Smart Plug Database Operations ───────────────────────────
 
 async def get_recent_readings_for_automation(limit: int = 30) -> List[dict]:
-    """
-    Get the most recent 'limit' sensor readings, newest first.
-    Used for 30-reading moving average calculations in automation rules.
-    """
+    """Get the most recent 'limit' sensor readings, newest first."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -404,9 +629,7 @@ async def upsert_plug_state(
     last_attempted_action: Optional[str] = None,
     last_action_result: Optional[str] = None
 ) -> None:
-    """
-    Insert or update the current state record for a smart plug.
-    """
+    """Insert or update the current state record for a smart plug."""
     now_iso = datetime.now().isoformat()
     verified_int = 1 if is_verified else 0
 
@@ -572,10 +795,7 @@ async def get_plug_timeline_events(
     end_time: Optional[str] = None,
     hours: Optional[float] = None
 ) -> List[dict]:
-    """
-    Get plug events ordered chronologically (oldest first).
-    Used to render trigger points on the main chart and plug activity graph.
-    """
+    """Get plug events ordered chronologically (oldest first)."""
     conditions = []
     params = []
 
@@ -615,6 +835,3 @@ async def get_plug_timeline_events(
                 }
                 for r in rows
             ]
-
-
-

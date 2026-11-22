@@ -32,10 +32,10 @@ G:\ESP32_WiFi_DHT22\
 │   └── esp32_sketch.ino          # Arduino code for ESP32
 └── server/
     ├── main.py                   # FastAPI server & endpoints
-    ├── config.py                 # Device registry & persisted settings
-    ├── database.py               # Async SQLite database setup
+    ├── config.py                 # Device registry & SQL-backed settings
+    ├── database.py               # Async SQLite database setup & SQL settings tables
     ├── models.py                 # Pydantic data & settings models
-    ├── automation_settings.json  # Persisted user-tweakable thresholds
+    ├── sensor_data.db            # SQLite DB containing readings, history & automation_settings
     ├── automation/
     │   ├── __init__.py
     │   ├── plug_rules.py         # Environmental moving average rules
@@ -82,7 +82,8 @@ G:\ESP32_WiFi_DHT22\
 | 3.4 | Open dashboard in browser | ✅ Done — `http://localhost:8000` |
 | 4.1 | Tapo Smart Plug Integration | ✅ Done — Registered Sprinkler, AC, Heater, Humidifier, Fan |
 | 4.2 | Implement 8 Automation Rules | ✅ Done — Temperature, Humidity, and Timed Schedules |
-| 4.3 | UI Settings Configuration Panel | ✅ Done — Live threshold tweaking & persistent JSON storage |
+| 4.3 | UI Settings Configuration Panel | ✅ Done — Live threshold tweaking & persistent SQLite table storage |
+| 4.4 | Persistent SQL Tables for Automation | ✅ Done — `automation_settings` & `automation_rules` in `sensor_data.db` |
 | 5 | Integration & Independent Power Test | 🔲 Next: test independent power bank & hardware plug verification |
 
 ---

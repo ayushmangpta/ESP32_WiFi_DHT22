@@ -365,8 +365,9 @@ The server controls 5 TP-Link Tapo P110 smart plugs via the local TPAP protocol:
    - Fan humidity trigger % and run duration in minutes
    - Sprinkler cycle interval (hours) and duration (minutes)
    - Fan schedule interval (hours) and duration (minutes)
-4. Click **💾 Save Settings**. Changes are saved to `server/automation_settings.json` and take effect immediately without restarting the server!
-5. In the **Scheduler Status** bar, you can see live countdowns to the next Sprinkler and Fan runs, or click **Run Sprinkler Now** / **Run Fan Now** for immediate manual test cycles.
+4. Click **💾 Save Settings**. Changes are permanently stored in the SQLite database (`automation_settings` table in `sensor_data.db`) and take effect immediately without restarting the server!
+5. Even if you restart your PC or the server process, all your customized thresholds remain preserved in the SQL database.
+6. In the **Scheduler Status** bar, you can see live countdowns to the next Sprinkler and Fan runs, or click **Run Sprinkler Now** / **Run Fan Now** for immediate manual test cycles.
 
 ---
 

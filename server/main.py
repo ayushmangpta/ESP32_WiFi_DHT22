@@ -54,6 +54,9 @@ from database import (
     delete_readings,
     get_plug_history_records,
     get_plug_timeline_events,
+    get_db_automation_settings,
+    update_db_automation_settings,
+    get_db_automation_rules,
 )
 from models import (
     SensorReading,
@@ -313,23 +316,29 @@ async def get_plug_timeline(
 
 @app.get("/api/automation/settings")
 async def get_settings():
-    """Retrieve all current automation thresholds and schedule intervals."""
-    return get_automation_settings()
+    """Retrieve all current automation thresholds from the SQLite database."""
+    return await get_db_automation_settings()
 
 
 @app.post("/api/automation/settings")
 async def update_settings(payload: AutomationSettingsUpdate):
     """
     Update automation settings & thresholds.
-    Persists to automation_settings.json and takes effect immediately.
+    Permanently saved to the SQLite 'automation_settings' table.
     """
     updates = payload.model_dump(exclude_unset=True)
-    updated = update_automation_settings(updates)
+    updated = await update_db_automation_settings(updates)
     return {
         "status": "ok",
-        "message": "Automation settings updated and saved successfully.",
+        "message": "Automation settings updated and saved to SQLite table successfully.",
         "settings": updated
     }
+
+
+@app.get("/api/automation/rules")
+async def get_rules_list():
+    """Retrieve all structured automation rules from the SQLite 'automation_rules' table."""
+    return await get_db_automation_rules()
 
 
 @app.get("/api/automation/scheduler")
