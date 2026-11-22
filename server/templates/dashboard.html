@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Sensor Dashboard — Temperature &amp; Humidity</title>
+    <title>ESP32 Sensor Logger &amp; Smart Plug Automation</title>
     <meta name="description"
-        content="Real-time temperature and humidity monitoring dashboard for ESP32 DHT22 sensor logger">
+        content="Real-time DHT22 temperature and humidity monitoring with automated TP-Link Tapo P110 smart plug control">
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,26 +14,25 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
 
-    <!-- Chart.js for history graph -->
+    <!-- Chart.js for history graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
 
     <style>
         /* ─── CSS Custom Properties (Design Tokens) ─── */
         :root {
             --bg-primary: #0a0e1a;
             --bg-secondary: #111827;
-            --bg-card: rgba(17, 24, 39, 0.7);
-            --bg-card-hover: rgba(31, 41, 55, 0.8);
+            --bg-card: rgba(17, 24, 39, 0.72);
+            --bg-card-hover: rgba(31, 41, 55, 0.85);
             --border-color: rgba(75, 85, 99, 0.3);
-            --border-glow: rgba(99, 102, 241, 0.2);
+            --border-glow: rgba(99, 102, 241, 0.25);
 
             --text-primary: #f9fafb;
             --text-secondary: #9ca3af;
             --text-muted: #6b7280;
 
             --accent-indigo: #818cf8;
-            --accent-indigo-dim: rgba(129, 140, 248, 0.1);
+            --accent-indigo-dim: rgba(129, 140, 248, 0.12);
 
             --temp-gradient-start: #f97316;
             --temp-gradient-end: #ef4444;
@@ -46,26 +45,28 @@
             --humid-bg: rgba(6, 182, 212, 0.08);
 
             --success-color: #34d399;
-            --success-bg: rgba(52, 211, 153, 0.1);
+            --success-bg: rgba(52, 211, 153, 0.12);
             --warning-color: #fbbf24;
             --error-color: #f87171;
-            --error-bg: rgba(248, 113, 113, 0.1);
+            --error-bg: rgba(248, 113, 113, 0.12);
+
+            --plug-sprinkler: #10b981;
+            --plug-ac: #06b6d4;
+            --plug-heater: #f59e0b;
 
             --radius-sm: 8px;
             --radius-md: 12px;
             --radius-lg: 16px;
             --radius-xl: 20px;
 
-            --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--border-color);
+            --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border-color);
             --shadow-glow-temp: 0 0 40px rgba(249, 115, 22, 0.15);
             --shadow-glow-humid: 0 0 40px rgba(6, 182, 212, 0.15);
 
             --transition-fast: 0.15s ease;
             --transition-medium: 0.3s ease;
-            --transition-slow: 0.5s ease;
         }
 
-        /* ─── Reset & Base ─── */
         *,
         *::before,
         *::after {
@@ -86,34 +87,27 @@
             overflow-x: hidden;
         }
 
-        /* ─── Animated Background ─── */
         body::before {
             content: '';
             position: fixed;
             inset: 0;
             background:
-                radial-gradient(ellipse 600px 400px at 20% 20%, rgba(99, 102, 241, 0.06), transparent),
-                radial-gradient(ellipse 500px 300px at 80% 80%, rgba(6, 182, 212, 0.05), transparent),
-                radial-gradient(ellipse 400px 400px at 50% 50%, rgba(249, 115, 22, 0.03), transparent);
+                radial-gradient(ellipse 650px 450px at 15% 15%, rgba(99, 102, 241, 0.08), transparent),
+                radial-gradient(ellipse 550px 350px at 85% 75%, rgba(6, 182, 212, 0.06), transparent),
+                radial-gradient(ellipse 450px 450px at 50% 40%, rgba(249, 115, 22, 0.04), transparent);
             z-index: -1;
             animation: bgPulse 8s ease-in-out infinite alternate;
         }
 
         @keyframes bgPulse {
-            0% {
-                opacity: 0.6;
-            }
-
-            100% {
-                opacity: 1;
-            }
+            0% { opacity: 0.6; }
+            100% { opacity: 1; }
         }
 
-        /* ─── Layout ─── */
         .container {
-            max-width: 1200px;
+            max-width: 1240px;
             margin: 0 auto;
-            padding: 24px 20px;
+            padding: 24px 20px 60px;
         }
 
         /* ─── Header ─── */
@@ -121,9 +115,11 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 32px;
+            margin-bottom: 28px;
             padding-bottom: 20px;
             border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+            gap: 16px;
         }
 
         .header-left {
@@ -141,11 +137,11 @@
             align-items: center;
             justify-content: center;
             font-size: 24px;
-            box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.35);
         }
 
         .header h1 {
-            font-size: 1.5rem;
+            font-size: 1.45rem;
             font-weight: 700;
             letter-spacing: -0.02em;
             background: linear-gradient(135deg, var(--text-primary), var(--accent-indigo));
@@ -157,10 +153,9 @@
         .header-subtitle {
             font-size: 0.8rem;
             color: var(--text-muted);
-            font-weight: 400;
+            margin-top: 2px;
         }
 
-        /* ─── Status Badge ─── */
         .status-badge {
             display: flex;
             align-items: center;
@@ -175,13 +170,13 @@
         .status-badge.connected {
             background: var(--success-bg);
             color: var(--success-color);
-            border: 1px solid rgba(52, 211, 153, 0.2);
+            border: 1px solid rgba(52, 211, 153, 0.25);
         }
 
         .status-badge.disconnected {
             background: var(--error-bg);
             color: var(--error-color);
-            border: 1px solid rgba(248, 113, 113, 0.2);
+            border: 1px solid rgba(248, 113, 113, 0.25);
         }
 
         .status-dot {
@@ -203,32 +198,23 @@
         }
 
         @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-                transform: scale(1);
-            }
-
-            50% {
-                opacity: 0.5;
-                transform: scale(0.85);
-            }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.85); }
         }
 
-        /* ─── Gauge Cards ─── */
+        /* ─── Real-Time Gauges ─── */
         .gauge-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 24px;
-            margin-bottom: 32px;
+            margin-bottom: 24px;
         }
 
         .gauge-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-xl);
-            padding: 32px;
+            padding: 28px;
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             transition: var(--transition-medium);
@@ -236,23 +222,9 @@
             overflow: hidden;
         }
 
-        .gauge-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: var(--radius-xl);
-            padding: 1px;
-            background: linear-gradient(135deg, transparent, var(--border-glow), transparent);
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            pointer-events: none;
-            transition: var(--transition-medium);
-        }
-
         .gauge-card:hover {
             transform: translateY(-2px);
-            border-color: rgba(75, 85, 99, 0.5);
+            border-color: rgba(75, 85, 99, 0.55);
         }
 
         .gauge-card.temp {
@@ -267,7 +239,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
         .gauge-label-icon {
@@ -280,13 +252,8 @@
             font-size: 18px;
         }
 
-        .temp .gauge-label-icon {
-            background: var(--temp-bg);
-        }
-
-        .humid .gauge-label-icon {
-            background: var(--humid-bg);
-        }
+        .temp .gauge-label-icon { background: var(--temp-bg); }
+        .humid .gauge-label-icon { background: var(--humid-bg); }
 
         .gauge-label span {
             font-size: 0.85rem;
@@ -297,7 +264,7 @@
         }
 
         .gauge-value {
-            font-size: 3.5rem;
+            font-size: 3.4rem;
             font-weight: 800;
             letter-spacing: -0.04em;
             line-height: 1;
@@ -320,7 +287,7 @@
         }
 
         .gauge-unit {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             font-weight: 400;
             opacity: 0.7;
         }
@@ -336,14 +303,14 @@
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 16px;
-            margin-bottom: 32px;
+            margin-bottom: 30px;
         }
 
         .stat-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-lg);
-            padding: 20px 24px;
+            padding: 16px 20px;
             backdrop-filter: blur(10px);
             transition: var(--transition-fast);
         }
@@ -362,21 +329,334 @@
         }
 
         .stat-value {
-            font-size: 1.3rem;
+            font-size: 1.25rem;
             font-weight: 700;
             color: var(--text-primary);
         }
 
-        .stat-value.accent-indigo {
-            color: var(--accent-indigo);
+        .stat-value.accent-indigo { color: var(--accent-indigo); }
+        .stat-value.accent-success { color: var(--success-color); }
+        .stat-value.accent-warning { color: var(--warning-color); }
+
+        /* ─── Phase 2: Smart Plug Section ─── */
+        .section-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 12px;
         }
 
-        .stat-value.accent-success {
+        .section-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+
+        .section-pill {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-indigo);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 100px;
+            padding: 2px 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* ─── Automation Status Banner ─── */
+        .auto-banner {
+            background: linear-gradient(135deg, rgba(17, 24, 39, 0.85), rgba(30, 27, 75, 0.5));
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: var(--radius-lg);
+            padding: 14px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            backdrop-filter: blur(12px);
+        }
+
+        .auto-banner-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .auto-banner-icon {
+            font-size: 22px;
+        }
+
+        .auto-banner-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .auto-banner-title {
+            font-size: 0.86rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .auto-banner-desc {
+            font-size: 0.74rem;
+            color: var(--text-secondary);
+        }
+
+        .btn-evaluate-now {
+            padding: 8px 16px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, #6366f1, #818cf8);
+            color: #ffffff;
+            font-size: 0.78rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+            transition: var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-evaluate-now:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(99, 102, 241, 0.5);
+        }
+
+        /* ─── Plug Cards Grid ─── */
+        .plug-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .plug-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: 24px;
+            backdrop-filter: blur(20px);
+            transition: var(--transition-medium);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .plug-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(99, 102, 241, 0.4);
+        }
+
+        .plug-card.state-on {
+            border-top: 3px solid var(--success-color);
+            box-shadow: var(--shadow-card), 0 0 25px rgba(52, 211, 153, 0.12);
+        }
+
+        .plug-card.state-off {
+            border-top: 3px solid #6b7280;
+            box-shadow: var(--shadow-card);
+        }
+
+        .plug-card.state-unknown {
+            border-top: 3px solid var(--warning-color);
+            box-shadow: var(--shadow-card);
+        }
+
+        .plug-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .plug-title-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .plug-icon-box {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-md);
+            background: rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .plug-name-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .plug-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .plug-role {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .plug-ip-badge {
+            font-size: 0.68rem;
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            padding: 3px 8px;
+            border-radius: 6px;
+            color: var(--text-secondary);
+        }
+
+        .plug-state-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 14px 0 16px;
+            padding: 12px 14px;
+            background: rgba(0, 0, 0, 0.22);
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(75, 85, 99, 0.18);
+        }
+
+        .plug-state-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+
+        .plug-state-badge.is-on {
             color: var(--success-color);
         }
 
-        .stat-value.accent-warning {
+        .plug-state-badge.is-off {
+            color: var(--text-muted);
+        }
+
+        .plug-state-badge.is-unknown {
             color: var(--warning-color);
+        }
+
+        .verified-tag {
+            font-size: 0.68rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 100px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .verified-tag.verified {
+            background: var(--success-bg);
+            color: var(--success-color);
+            border: 1px solid rgba(52, 211, 153, 0.25);
+        }
+
+        .verified-tag.unverified {
+            background: rgba(245, 158, 11, 0.12);
+            color: var(--warning-color);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+
+        .plug-meta-list {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 20px;
+        }
+
+        .plug-meta-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .plug-meta-val {
+            color: var(--text-secondary);
+            font-weight: 500;
+            max-width: 65%;
+            text-align: right;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .plug-actions-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .btn-plug-action {
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            font-size: 0.8rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn-plug-action.btn-on {
+            background: rgba(16, 185, 129, 0.1);
+            color: #34d399;
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-plug-action.btn-on:hover:not(:disabled) {
+            background: var(--success-color);
+            color: #064e3b;
+            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+        }
+
+        .btn-plug-action.btn-off {
+            background: rgba(239, 68, 68, 0.08);
+            color: #f87171;
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-plug-action.btn-off:hover:not(:disabled) {
+            background: var(--error-color);
+            color: #450a0a;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+        }
+
+        .btn-plug-action:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         /* ─── Chart Section ─── */
@@ -385,22 +665,9 @@
             border: 1px solid var(--border-color);
             border-radius: var(--radius-xl);
             padding: 28px;
-            margin-bottom: 32px;
+            margin-bottom: 28px;
             backdrop-filter: blur(20px);
             box-shadow: var(--shadow-card);
-        }
-
-        .chart-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-
-        .chart-title {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-primary);
         }
 
         .chart-header {
@@ -410,6 +677,12 @@
             margin-bottom: 16px;
             flex-wrap: wrap;
             gap: 12px;
+        }
+
+        .chart-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
         }
 
         .chart-controls-wrapper {
@@ -448,454 +721,121 @@
 
         .chart-btn:hover {
             color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.05);
         }
 
         .chart-btn.active {
-            background: var(--accent-indigo);
+            background: linear-gradient(135deg, #6366f1, #818cf8);
             color: #ffffff;
-            box-shadow: 0 0 14px rgba(99, 102, 241, 0.4);
             font-weight: 600;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
         }
 
         .btn-refresh-icon {
-            width: 30px;
-            height: 30px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             border: 1px solid var(--border-color);
             background: rgba(17, 24, 39, 0.6);
-            color: var(--text-muted);
-            display: inline-flex;
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
             transition: var(--transition-fast);
-            font-size: 13px;
         }
 
         .btn-refresh-icon:hover {
             color: var(--accent-indigo);
             border-color: var(--accent-indigo);
-            transform: rotate(60deg);
+            transform: rotate(45deg);
         }
 
         .btn-clear-history {
-            padding: 6px 12px;
+            padding: 6px 14px;
             border-radius: 100px;
-            border: 1px solid rgba(248, 113, 113, 0.3);
-            background: rgba(248, 113, 113, 0.08);
-            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            background: rgba(239, 68, 68, 0.08);
+            color: #fca5a5;
             font-size: 0.72rem;
-            font-weight: 500;
+            font-weight: 600;
             font-family: inherit;
             cursor: pointer;
             transition: var(--transition-fast);
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            white-space: nowrap;
         }
 
         .btn-clear-history:hover {
-            background: rgba(248, 113, 113, 0.2);
-            border-color: #ef4444;
-            color: #fca5a5;
-            box-shadow: 0 0 14px rgba(239, 68, 68, 0.3);
-            transform: translateY(-1px);
-        }
-
-        /* ─── Clear History Modal ─── */
-        .modal-backdrop {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            animation: modalFadeIn 0.2s ease-out;
-        }
-
-        .modal-backdrop.active {
-            display: flex;
-        }
-
-        @keyframes modalFadeIn {
-            from {
-                opacity: 0;
-            }
-
-            to {
-                opacity: 1;
-            }
-        }
-
-        @keyframes modalSlideUp {
-            from {
-                opacity: 0;
-                transform: translateY(16px) scale(0.97);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
-
-        .modal-dialog {
-            background: #111827;
-            border: 1px solid rgba(75, 85, 99, 0.4);
-            border-radius: var(--radius-xl);
-            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
-            width: 100%;
-            max-width: 520px;
-            overflow: hidden;
-            animation: modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .modal-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 20px 24px;
-            border-bottom: 1px solid rgba(75, 85, 99, 0.3);
-        }
-
-        .modal-title-group {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .modal-icon {
-            width: 38px;
-            height: 38px;
-            border-radius: var(--radius-sm);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .modal-icon.danger {
-            background: rgba(239, 68, 68, 0.15);
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
-        .modal-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        .modal-subtitle {
-            font-size: 0.74rem;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
-
-        .modal-close-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            font-size: 20px;
-            cursor: pointer;
-            padding: 4px;
-            line-height: 1;
-            transition: var(--transition-fast);
-        }
-
-        .modal-close-btn:hover {
-            color: var(--text-primary);
-        }
-
-        .modal-body {
-            padding: 22px 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-        }
-
-        .clear-options-label {
-            font-size: 0.76rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-secondary);
-        }
-
-        .clear-options-grid {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .clear-option-card {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 14px;
-            border-radius: var(--radius-md);
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid var(--border-color);
-            cursor: pointer;
-            transition: var(--transition-fast);
-        }
-
-        .clear-option-card:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(99, 102, 241, 0.4);
-        }
-
-        .clear-option-card:has(input:checked) {
-            background: rgba(99, 102, 241, 0.08);
-            border-color: var(--accent-indigo);
-            box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
-        }
-
-        .clear-option-card.danger-card:hover {
-            border-color: rgba(239, 68, 68, 0.4);
-        }
-
-        .clear-option-card.danger-card:has(input:checked) {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: #ef4444;
-            box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
-        }
-
-        .clear-option-card input[type="radio"] {
-            accent-color: var(--accent-indigo);
-            width: 16px;
-            height: 16px;
-            cursor: pointer;
-        }
-
-        .clear-option-card.danger-card input[type="radio"] {
-            accent-color: #ef4444;
-        }
-
-        .clear-option-content {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .clear-option-title {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .clear-option-desc {
-            font-size: 0.72rem;
-            color: var(--text-muted);
-        }
-
-        .clear-custom-fields {
-            display: flex;
-            gap: 10px;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 12px;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--border-color);
-            margin-top: 4px;
-            flex-wrap: wrap;
-        }
-
-        .clear-warning-box {
-            padding: 10px 14px;
-            border-radius: var(--radius-sm);
-            background: rgba(245, 158, 11, 0.1);
-            border: 1px solid rgba(245, 158, 11, 0.3);
-            color: #fbbf24;
-            font-size: 0.74rem;
-            line-height: 1.4;
-            transition: var(--transition-fast);
-        }
-
-        .clear-warning-box.danger {
-            background: rgba(239, 68, 68, 0.12);
-            border-color: rgba(239, 68, 68, 0.4);
-            color: #fca5a5;
-        }
-
-        .clear-error-box {
-            padding: 8px 12px;
-            border-radius: var(--radius-sm);
-            background: var(--error-bg);
-            border: 1px solid rgba(248, 113, 113, 0.4);
-            color: var(--error-color);
-            font-size: 0.75rem;
-        }
-
-        .modal-footer {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 10px;
-            padding: 16px 24px;
-            border-top: 1px solid rgba(75, 85, 99, 0.3);
-            background: rgba(0, 0, 0, 0.15);
-        }
-
-        .btn-cancel {
-            padding: 8px 16px;
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            background: transparent;
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-            font-family: inherit;
-            cursor: pointer;
-            transition: var(--transition-fast);
-        }
-
-        .btn-cancel:hover {
-            color: var(--text-primary);
-            border-color: var(--text-muted);
-        }
-
-        .btn-confirm-delete {
-            padding: 8px 20px;
-            border: none;
-            border-radius: var(--radius-sm);
-            background: linear-gradient(135deg, #ef4444, #dc2626);
+            background: rgba(239, 68, 68, 0.2);
             color: #ffffff;
-            font-size: 0.82rem;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
-            transition: var(--transition-fast);
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+            border-color: var(--error-color);
         }
 
-        .btn-confirm-delete:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 18px rgba(239, 68, 68, 0.5);
-        }
-
-        /* ─── Toast Notification ─── */
-        .toast-notification {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            background: rgba(17, 24, 39, 0.95);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            padding: 12px 18px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.82rem;
-            color: var(--text-primary);
-            z-index: 2000;
-            opacity: 0;
-            transform: translateY(12px);
-            pointer-events: none;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            backdrop-filter: blur(12px);
-        }
-
-        .toast-notification.show {
-            opacity: 1;
-            transform: translateY(0);
-            pointer-events: auto;
-        }
-
-        .toast-notification.success {
-            border-color: rgba(52, 211, 153, 0.4);
-            color: var(--success-color);
-        }
-
-        .toast-notification.error {
-            border-color: rgba(239, 68, 68, 0.4);
-            color: var(--error-color);
-        }
-
-        /* ─── Custom Date Range Drawer ─── */
+        /* ─── Custom Date Range Panel ─── */
         .custom-range-panel {
-            display: none;
-            background: rgba(15, 23, 42, 0.9);
-            border: 1px solid rgba(99, 102, 241, 0.3);
+            background: rgba(17, 24, 39, 0.6);
+            border: 1px solid var(--border-color);
             border-radius: var(--radius-lg);
-            padding: 16px 20px;
+            padding: 16px;
             margin-bottom: 18px;
-            animation: fadeInDown 0.25s ease-out;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            display: none;
+            flex-direction: column;
+            gap: 12px;
         }
 
         .custom-range-panel.open {
-            display: block;
+            display: flex;
+            animation: fadeIn 0.2s ease;
         }
 
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-8px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .custom-range-grid {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 12px;
             align-items: flex-end;
-            gap: 14px;
         }
 
         .custom-field {
             display: flex;
             flex-direction: column;
             gap: 6px;
-            flex: 1 1 210px;
         }
 
         .custom-field label {
             font-size: 0.72rem;
             font-weight: 600;
+            color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            gap: 6px;
         }
 
         .custom-field input[type="datetime-local"] {
-            background: rgba(17, 24, 39, 0.95);
+            background: rgba(0, 0, 0, 0.4);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-sm);
-            color: var(--text-primary);
             padding: 8px 12px;
-            font-size: 0.82rem;
+            color: var(--text-primary);
             font-family: inherit;
-            color-scheme: dark;
+            font-size: 0.8rem;
             outline: none;
             transition: var(--transition-fast);
         }
 
         .custom-field input[type="datetime-local"]:focus {
             border-color: var(--accent-indigo);
-            box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+            box-shadow: 0 0 0 2px var(--accent-indigo-dim);
         }
 
         .custom-actions {
             display: flex;
-            align-items: center;
             gap: 8px;
-            flex-wrap: wrap;
         }
 
         .btn-apply-range {
@@ -941,8 +881,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-top: 12px;
-            padding-top: 10px;
+            padding-top: 8px;
             border-top: 1px solid rgba(75, 85, 99, 0.2);
             font-size: 0.74rem;
             color: var(--text-muted);
@@ -956,7 +895,6 @@
             padding: 3px 8px;
             color: var(--accent-indigo);
             cursor: pointer;
-            text-decoration: none;
             font-size: 0.72rem;
             transition: var(--transition-fast);
         }
@@ -970,11 +908,10 @@
         .range-error-msg {
             color: var(--error-color);
             font-size: 0.75rem;
-            margin-top: 8px;
             display: none;
         }
 
-        /* ─── Range Summary & Stats Ribbon ─── */
+        /* ─── Range Summary Ribbon ─── */
         .chart-meta-bar {
             display: flex;
             align-items: center;
@@ -1061,10 +998,14 @@
             color: var(--humid-color);
         }
 
+        .stat-pill.trigger-pill {
+            border-color: rgba(129, 140, 248, 0.3);
+            color: var(--accent-indigo);
+        }
+
         .stat-pill-sub {
             color: var(--text-muted);
             font-size: 0.68rem;
-            font-weight: 400;
         }
 
         .stat-pill-val {
@@ -1090,7 +1031,12 @@
 
         .chart-canvas-wrapper {
             position: relative;
-            height: 280px;
+            height: 300px;
+        }
+
+        .chart-canvas-wrapper-sm {
+            position: relative;
+            height: 220px;
         }
 
         .chart-empty-overlay {
@@ -1106,20 +1052,21 @@
             backdrop-filter: blur(4px);
         }
 
-        /* ─── History Table ─── */
+        /* ─── Tables ─── */
         .table-section {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-xl);
-            padding: 28px;
+            padding: 26px;
+            margin-bottom: 28px;
             backdrop-filter: blur(20px);
             box-shadow: var(--shadow-card);
         }
 
         .table-title {
             font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
         }
 
         table {
@@ -1135,7 +1082,7 @@
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            padding: 12px 16px;
+            padding: 12px 14px;
             border-bottom: 1px solid var(--border-color);
         }
 
@@ -1148,36 +1095,56 @@
         }
 
         tbody td {
-            padding: 12px 16px;
-            font-size: 0.85rem;
+            padding: 12px 14px;
+            font-size: 0.82rem;
             color: var(--text-secondary);
             border-bottom: 1px solid rgba(75, 85, 99, 0.15);
         }
 
-        tbody td:nth-child(2) {
-            color: var(--temp-color);
+        .tag-source {
+            font-size: 0.68rem;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .tag-source.automation {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-indigo);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .tag-source.manual {
+            background: rgba(245, 158, 11, 0.12);
+            color: var(--warning-color);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .tag-status-ok {
+            color: var(--success-color);
             font-weight: 600;
         }
 
-        tbody td:nth-child(3) {
-            color: var(--humid-color);
+        .tag-status-err {
+            color: var(--error-color);
             font-weight: 600;
         }
 
         .no-data {
             text-align: center;
-            padding: 48px 0;
+            padding: 40px 0;
             color: var(--text-muted);
         }
 
         .no-data-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
+            font-size: 40px;
+            margin-bottom: 12px;
             opacity: 0.4;
         }
 
         .no-data-text {
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             margin-bottom: 4px;
         }
 
@@ -1185,62 +1152,244 @@
             font-size: 0.75rem;
         }
 
-        /* ─── Value Animation ─── */
-        @keyframes valueUpdate {
-            0% {
-                transform: scale(1);
-            }
-
-            50% {
-                transform: scale(1.04);
-            }
-
-            100% {
-                transform: scale(1);
-            }
+        /* ─── Clear History Modal ─── */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            z-index: 999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
         }
 
-        .value-updated {
-            animation: valueUpdate 0.4s ease;
+        .modal-backdrop.active {
+            display: flex;
+            animation: modalFadeIn 0.2s ease;
         }
 
-        /* ─── Responsive ─── */
-        @media (max-width: 768px) {
+        @keyframes modalFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-dialog {
+            background: #111827;
+            border: 1px solid rgba(75, 85, 99, 0.4);
+            border-radius: var(--radius-xl);
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .modal-icon.danger {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            background: var(--error-bg);
+            color: var(--error-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .modal-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .modal-subtitle {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+        }
+
+        .modal-close-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .modal-close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .clear-options-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .clear-option-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.02);
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .clear-option-card:hover {
+            border-color: rgba(99, 102, 241, 0.4);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .clear-option-card.danger-card:hover {
+            border-color: rgba(239, 68, 68, 0.4);
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .clear-option-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .clear-option-desc {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .clear-custom-fields {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: var(--radius-sm);
+        }
+
+        .clear-warning-box {
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            color: #fbbf24;
+            font-size: 0.74rem;
+        }
+
+        .clear-warning-box.danger {
+            background: var(--error-bg);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-cancel {
+            padding: 8px 16px;
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--text-muted);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .btn-confirm-delete {
+            padding: 8px 18px;
+            border: none;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #ffffff;
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* ─── Toast Notifications ─── */
+        .toast-notification {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #1f2937;
+            color: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 12px 20px;
+            font-size: 0.82rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+            max-width: 420px;
+        }
+
+        .toast-notification.show {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .toast-notification.success {
+            border-color: rgba(16, 185, 129, 0.4);
+            border-left: 4px solid var(--success-color);
+        }
+
+        .toast-notification.error {
+            border-color: rgba(239, 68, 68, 0.4);
+            border-left: 4px solid var(--error-color);
+        }
+
+        /* ─── Responsive Media Queries ─── */
+        @media (max-width: 992px) {
+            .plug-grid {
+                grid-template-columns: 1fr;
+            }
             .gauge-grid {
                 grid-template-columns: 1fr;
             }
+        }
 
+        @media (max-width: 640px) {
             .stats-bar {
                 grid-template-columns: 1fr;
             }
-
-            .gauge-value {
-                font-size: 2.5rem;
+            .custom-range-grid {
+                grid-template-columns: 1fr;
             }
-
-            .header {
-                flex-direction: column;
-                gap: 12px;
-                align-items: flex-start;
-            }
-        }
-
-        /* ─── Scrollbar ─── */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border-color);
-            border-radius: 3px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--text-muted);
         }
     </style>
 </head>
@@ -1248,42 +1397,42 @@
 <body>
     <div class="container">
         <!-- Header -->
-        <header class="header" id="header">
+        <header class="header">
             <div class="header-left">
-                <div class="logo-icon">🌡️</div>
+                <div class="logo-icon">📡</div>
                 <div>
-                    <h1>Sensor Dashboard</h1>
-                    <div class="header-subtitle">ESP32 + DHT22 — Local Wi-Fi Logger</div>
+                    <h1>ESP32 DHT22 &amp; Smart Plug Automation</h1>
+                    <div class="header-subtitle">Real-time Environmental Monitor &amp; TP-Link Tapo P110 Smart Plug Control</div>
                 </div>
             </div>
             <div class="status-badge disconnected" id="statusBadge">
                 <div class="status-dot"></div>
-                <span id="statusText">Waiting for data…</span>
+                <span id="statusText">Connecting…</span>
             </div>
         </header>
 
-        <!-- Gauge Cards -->
+        <!-- Real-Time Gauges -->
         <div class="gauge-grid">
-            <div class="gauge-card temp" id="tempCard">
+            <div class="gauge-card temp">
                 <div class="gauge-label">
                     <div class="gauge-label-icon">🌡️</div>
                     <span>Temperature</span>
                 </div>
                 <div class="gauge-value" id="tempValue">--<span class="gauge-unit"> °C</span></div>
-                <div class="gauge-timestamp" id="tempTimestamp">No data yet</div>
+                <div class="gauge-timestamp" id="tempTimestamp">Waiting for data…</div>
             </div>
 
-            <div class="gauge-card humid" id="humidCard">
+            <div class="gauge-card humid">
                 <div class="gauge-label">
                     <div class="gauge-label-icon">💧</div>
                     <span>Humidity</span>
                 </div>
                 <div class="gauge-value" id="humidValue">--<span class="gauge-unit"> %</span></div>
-                <div class="gauge-timestamp" id="humidTimestamp">No data yet</div>
+                <div class="gauge-timestamp" id="humidTimestamp">Waiting for data…</div>
             </div>
         </div>
 
-        <!-- Stats Bar -->
+        <!-- System Stats Bar -->
         <div class="stats-bar">
             <div class="stat-card">
                 <div class="stat-label">Total Readings</div>
@@ -1295,14 +1444,189 @@
             </div>
             <div class="stat-card">
                 <div class="stat-label">Update Interval</div>
-                <div class="stat-value accent-warning">5s</div>
+                <div class="stat-value accent-warning">5s (ESP32)</div>
             </div>
         </div>
 
-        <!-- Chart -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- PHASE 2: SMART PLUG CONTROL & AUTOMATION DASHBOARD     -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="section-header-row">
+            <div class="section-title-wrap">
+                <div class="section-title">🔌 Smart Plug Automation (TP-Link Tapo P110)</div>
+                <span class="section-pill">Phase 2</span>
+            </div>
+            <button class="btn-evaluate-now" onclick="triggerAutomation()" id="btnEvalNow">
+                <span>⚡ Evaluate Automation Now</span>
+            </button>
+        </div>
+
+        <!-- Automation Status Banner -->
+        <div class="auto-banner" id="automationBanner">
+            <div class="auto-banner-left">
+                <div class="auto-banner-icon">🤖</div>
+                <div class="auto-banner-info">
+                    <div class="auto-banner-title" id="autoStatusTitle">Automation Engine: Active (30-Reading Moving Average)</div>
+                    <div class="auto-banner-desc" id="autoStatusDesc">
+                        Sprinkler: ON if Humid &lt; 45% &amp; Temp &ge; 15°C • AC: ON if Temp &gt; 28°C • Heater: ON if Temp &lt; 18°C
+                    </div>
+                </div>
+            </div>
+            <div id="autoLastEval" style="font-size: 0.72rem; color: var(--text-muted); font-family: monospace;">
+                Last eval: Initializing…
+            </div>
+        </div>
+
+        <!-- Smart Plugs Grid (Sprinkler, AC, Heater) -->
+        <div class="plug-grid" id="plugGrid">
+            <!-- Sprinkler Card -->
+            <div class="plug-card state-unknown" id="card-sprinkler">
+                <div>
+                    <div class="plug-header">
+                        <div class="plug-title-box">
+                            <div class="plug-icon-box">🌱</div>
+                            <div class="plug-name-group">
+                                <div class="plug-name">Sprinkler</div>
+                                <div class="plug-role">Irrigation &amp; Humidity Control</div>
+                            </div>
+                        </div>
+                        <span class="plug-ip-badge" id="ip-sprinkler">192.168.1.14</span>
+                    </div>
+
+                    <div class="plug-state-row">
+                        <div class="plug-state-badge is-unknown" id="badge-sprinkler">
+                            <span>●</span> <span id="state-sprinkler">UNKNOWN</span>
+                        </div>
+                        <span class="verified-tag unverified" id="verified-sprinkler">Pending Sync</span>
+                    </div>
+
+                    <div class="plug-meta-list">
+                        <div class="plug-meta-item">
+                            <span>Protocol:</span>
+                            <span class="plug-meta-val">TPAP (python-kasa)</span>
+                        </div>
+                        <div class="plug-meta-item">
+                            <span>Last Trigger:</span>
+                            <span class="plug-meta-val" id="reason-sprinkler">--</span>
+                        </div>
+                        <div class="plug-meta-item">
+                            <span>Last Checked:</span>
+                            <span class="plug-meta-val" id="time-sprinkler">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plug-actions-group">
+                    <button class="btn-plug-action btn-on" id="btn-on-sprinkler" onclick="togglePlug('sprinkler', 'on')">
+                        <span>⚡ Turn ON</span>
+                    </button>
+                    <button class="btn-plug-action btn-off" id="btn-off-sprinkler" onclick="togglePlug('sprinkler', 'off')">
+                        <span>⏹ Turn OFF</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- AC Card -->
+            <div class="plug-card state-unknown" id="card-ac">
+                <div>
+                    <div class="plug-header">
+                        <div class="plug-title-box">
+                            <div class="plug-icon-box">❄️</div>
+                            <div class="plug-name-group">
+                                <div class="plug-name">Air Conditioner</div>
+                                <div class="plug-role">High-Temperature Cooling</div>
+                            </div>
+                        </div>
+                        <span class="plug-ip-badge" id="ip-ac">192.168.1.15</span>
+                    </div>
+
+                    <div class="plug-state-row">
+                        <div class="plug-state-badge is-unknown" id="badge-ac">
+                            <span>●</span> <span id="state-ac">UNKNOWN</span>
+                        </div>
+                        <span class="verified-tag unverified" id="verified-ac">Pending Sync</span>
+                    </div>
+
+                    <div class="plug-meta-list">
+                        <div class="plug-meta-item">
+                            <span>Protocol:</span>
+                            <span class="plug-meta-val">TPAP (python-kasa)</span>
+                        </div>
+                        <div class="plug-meta-item">
+                            <span>Last Trigger:</span>
+                            <span class="plug-meta-val" id="reason-ac">--</span>
+                        </div>
+                        <div class="plug-meta-item">
+                            <span>Last Checked:</span>
+                            <span class="plug-meta-val" id="time-ac">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plug-actions-group">
+                    <button class="btn-plug-action btn-on" id="btn-on-ac" onclick="togglePlug('ac', 'on')">
+                        <span>⚡ Turn ON</span>
+                    </button>
+                    <button class="btn-plug-action btn-off" id="btn-off-ac" onclick="togglePlug('ac', 'off')">
+                        <span>⏹ Turn OFF</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Heater Card -->
+            <div class="plug-card state-unknown" id="card-heater">
+                <div>
+                    <div class="plug-header">
+                        <div class="plug-title-box">
+                            <div class="plug-icon-box">🔥</div>
+                            <div class="plug-name-group">
+                                <div class="plug-name">Space Heater</div>
+                                <div class="plug-role">Low-Temperature Heating</div>
+                            </div>
+                        </div>
+                        <span class="plug-ip-badge" id="ip-heater">192.168.1.16</span>
+                    </div>
+
+                    <div class="plug-state-row">
+                        <div class="plug-state-badge is-unknown" id="badge-heater">
+                            <span>●</span> <span id="state-heater">UNKNOWN</span>
+                        </div>
+                        <span class="verified-tag unverified" id="verified-heater">Pending Sync</span>
+                    </div>
+
+                    <div class="plug-meta-list">
+                        <div class="plug-meta-item">
+                            <span>Protocol:</span>
+                            <span class="plug-meta-val">TPAP (python-kasa)</span>
+                        </div>
+                        <div class="plug-meta-item">
+                            <span>Last Trigger:</span>
+                            <span class="plug-meta-val" id="reason-heater">--</span>
+                        </div>
+                        <div class="plug-meta-item">
+                            <span>Last Checked:</span>
+                            <span class="plug-meta-val" id="time-heater">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plug-actions-group">
+                    <button class="btn-plug-action btn-on" id="btn-on-heater" onclick="togglePlug('heater', 'on')">
+                        <span>⚡ Turn ON</span>
+                    </button>
+                    <button class="btn-plug-action btn-off" id="btn-off-heater" onclick="togglePlug('heater', 'off')">
+                        <span>⏹ Turn OFF</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- CHART 1: TEMPERATURE, HUMIDITY & PLUG TRIGGER MARKERS  -->
+        <!-- ═══════════════════════════════════════════════════════ -->
         <div class="chart-section">
             <div class="chart-header">
-                <div class="chart-title">📈 Readings Over Time</div>
+                <div class="chart-title">📈 Environmental Readings &amp; Plug Trigger Events</div>
                 <div class="chart-controls-wrapper">
                     <div class="chart-btn-group">
                         <button class="chart-btn active" id="btnPreset20" onclick="selectPreset('20')">Last 20</button>
@@ -1312,12 +1636,11 @@
                         <button class="chart-btn" id="btnCustomRange" onclick="toggleCustomRange()">📅 Custom</button>
                     </div>
                     <button class="btn-refresh-icon" onclick="fetchHistory()" title="Refresh Graph Data">↻</button>
-                    <button class="btn-clear-history" onclick="openClearModal()" title="Clear sensor history">🗑️ Clear
-                        History</button>
+                    <button class="btn-clear-history" onclick="openClearModal()" title="Clear sensor history">🗑️ Clear History</button>
                 </div>
             </div>
 
-            <!-- Custom Date Range Collapsible Drawer -->
+            <!-- Custom Date Range Drawer -->
             <div class="custom-range-panel" id="customRangePanel">
                 <div class="custom-range-grid">
                     <div class="custom-field">
@@ -1338,10 +1661,8 @@
                 <div class="quick-presets-row">
                     <span>Quick Shortcuts:</span>
                     <button type="button" class="quick-preset-link" onclick="setCustomShortcut('today')">Today</button>
-                    <button type="button" class="quick-preset-link"
-                        onclick="setCustomShortcut('yesterday')">Yesterday</button>
-                    <button type="button" class="quick-preset-link" onclick="setCustomShortcut('7d')">Past 7
-                        Days</button>
+                    <button type="button" class="quick-preset-link" onclick="setCustomShortcut('yesterday')">Yesterday</button>
+                    <button type="button" class="quick-preset-link" onclick="setCustomShortcut('7d')">Past 7 Days</button>
                 </div>
                 <div class="range-error-msg" id="rangeErrorMsg"></div>
             </div>
@@ -1354,19 +1675,23 @@
                         <span id="rangeModeText">LIVE AUTO-REFRESH</span>
                     </span>
                     <span class="range-count-label" id="rangeCountLabel">Loading readings…</span>
-                    <button class="btn-resume-live" id="btnResumeLive" style="display: none;"
-                        onclick="resetToLive()">Resume Live ⚡</button>
+                    <button class="btn-resume-live" id="btnResumeLive" style="display: none;" onclick="resetToLive()">Resume Live ⚡</button>
                 </div>
                 <div class="chart-meta-right">
-                    <div class="stat-pill temp-pill" id="tempStatsPill" title="Temperature Range for this time window">
+                    <div class="stat-pill temp-pill" id="tempStatsPill">
                         <span>🌡️</span>
                         <span class="stat-pill-sub">Temp:</span>
                         <span class="stat-pill-val" id="tempRangeStats">--</span>
                     </div>
-                    <div class="stat-pill humid-pill" id="humidStatsPill" title="Humidity Range for this time window">
+                    <div class="stat-pill humid-pill" id="humidStatsPill">
                         <span>💧</span>
                         <span class="stat-pill-sub">Humid:</span>
                         <span class="stat-pill-val" id="humidRangeStats">--</span>
+                    </div>
+                    <div class="stat-pill trigger-pill" id="triggerStatsPill">
+                        <span>⚡</span>
+                        <span class="stat-pill-sub">Triggers:</span>
+                        <span class="stat-pill-val" id="triggerCountStats">0 events</span>
                     </div>
                 </div>
             </div>
@@ -1375,21 +1700,57 @@
                 <canvas id="historyChart"></canvas>
                 <div class="chart-empty-overlay" id="chartEmptyOverlay">
                     <div class="no-data-icon" style="font-size:36px; margin-bottom:8px;">📊</div>
-                    <div class="no-data-text" id="chartEmptyText"
-                        style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">No readings recorded in
-                        this time range</div>
-                    <div class="no-data-sub" style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">Try
-                        selecting a wider date range or switch back to live mode.</div>
-                    <button class="btn-apply-range" style="font-size:0.75rem; padding:6px 14px;"
-                        onclick="resetToLive()">Switch to Live (Last 20)</button>
+                    <div class="no-data-text" id="chartEmptyText" style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">No readings recorded in this time range</div>
+                    <div class="no-data-sub" style="font-size:0.75rem; color:var(--text-muted); margin-bottom:12px;">Try selecting a wider date range or switch back to live mode.</div>
+                    <button class="btn-apply-range" style="font-size:0.75rem; padding:6px 14px;" onclick="resetToLive()">Switch to Live (Last 20)</button>
                 </div>
             </div>
         </div>
 
-        <!-- History Table -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- CHART 2: SMART PLUG STATE ACTIVITY (COMPREHENSIVE)     -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="chart-section">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">⚡ Smart Plug State Activity History</div>
+                    <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 3px;">
+                        Stepped-line timeline showing operational ON/OFF cycles of Sprinkler, AC, and Heater
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-canvas-wrapper-sm">
+                <canvas id="plugHistoryChart"></canvas>
+                <div class="chart-empty-overlay" id="plugChartEmptyOverlay">
+                    <div class="no-data-icon" style="font-size:32px; margin-bottom:6px;">🔌</div>
+                    <div class="no-data-text" style="font-size:0.85rem; font-weight:600; color:var(--text-primary);">No smart plug state changes recorded yet</div>
+                    <div class="no-data-sub" style="font-size:0.75rem; color:var(--text-muted);">Events will appear here as plugs switch ON or OFF automatically or manually.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TABLE 1: SMART PLUG ACTION LOG                         -->
+        <!-- ═══════════════════════════════════════════════════════ -->
         <div class="table-section">
-            <div
-                style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;">
+                <div class="table-title">📜 Smart Plug Event &amp; Action History Log</div>
+                <button class="btn-refresh-icon" onclick="fetchPlugHistoryLog()" title="Refresh Plug History">↻</button>
+            </div>
+            <div id="plugTableContainer">
+                <div class="no-data">
+                    <div class="no-data-icon">📋</div>
+                    <div class="no-data-text">Loading smart plug history…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TABLE 2: SENSOR READINGS LOG                           -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="table-section">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
                 <div class="table-title" style="margin-bottom: 0;">📋 Sensor Readings Log</div>
                 <button class="btn-clear-history" onclick="openClearModal()">🗑️ Clear History</button>
             </div>
@@ -1403,7 +1764,7 @@
         </div>
     </div>
 
-    <!-- Clear History Modal Dialog -->
+    <!-- ─── Clear History Modal Dialog ─── -->
     <div class="modal-backdrop" id="clearModalBackdrop" onclick="handleBackdropClick(event)">
         <div class="modal-dialog">
             <div class="modal-header">
@@ -1418,10 +1779,9 @@
             </div>
 
             <div class="modal-body">
-                <div class="clear-options-label">Select what to clear:</div>
+                <div style="font-size:0.8rem; font-weight:600; color:var(--text-secondary);">Select what to clear:</div>
 
                 <div class="clear-options-grid">
-                    <!-- Preset: Last 1 Hour -->
                     <label class="clear-option-card">
                         <input type="radio" name="clearScope" value="1h" checked onchange="onClearOptionChange()">
                         <div class="clear-option-content">
@@ -1430,7 +1790,6 @@
                         </div>
                     </label>
 
-                    <!-- Preset: Last 1 Day (24 Hours) -->
                     <label class="clear-option-card">
                         <input type="radio" name="clearScope" value="24h" onchange="onClearOptionChange()">
                         <div class="clear-option-content">
@@ -1439,7 +1798,6 @@
                         </div>
                     </label>
 
-                    <!-- Custom Range -->
                     <label class="clear-option-card">
                         <input type="radio" name="clearScope" value="custom" onchange="onClearOptionChange()">
                         <div class="clear-option-content">
@@ -1448,7 +1806,6 @@
                         </div>
                     </label>
 
-                    <!-- Clear All History -->
                     <label class="clear-option-card danger-card">
                         <input type="radio" name="clearScope" value="all" onchange="onClearOptionChange()">
                         <div class="clear-option-content">
@@ -1458,7 +1815,6 @@
                     </label>
                 </div>
 
-                <!-- Custom Range Inputs (visible only when 'custom' selected) -->
                 <div class="clear-custom-fields" id="clearCustomFields" style="display: none;">
                     <div class="custom-field">
                         <label for="clearStartInput">📅 From (Start):</label>
@@ -1474,7 +1830,7 @@
                     ⚠️ Readings logged in the last 1 hour will be permanently deleted from SQLite (sensor_data.db).
                 </div>
 
-                <div class="clear-error-box" id="clearErrorBox" style="display: none;"></div>
+                <div class="clear-error-box" id="clearErrorBox" style="display: none; color:var(--error-color); font-size:0.75rem;"></div>
             </div>
 
             <div class="modal-footer">
@@ -1487,22 +1843,26 @@
     </div>
 
     <script>
-        // ─── State ─── 
+        // ─── Global State ───
         let rangeMode = 'preset';      // 'preset' or 'custom'
         let currentPreset = '20';      // '20', '1h', '24h', '2d'
         let customStartDate = '';
         let customEndDate = '';
         let historyChart = null;
+        let plugHistoryChart = null;
         let lastReadingId = null;
         let liveGaugeInterval = null;
         let chartPollInterval = null;
+        let plugPollInterval = null;
         let currentRawTimestamps = [];
+        let currentTimelineEvents = [];
+        let currentPlugsStatusMap = { sprinkler: 'UNKNOWN', ac: 'UNKNOWN', heater: 'UNKNOWN' };
 
         const PRESETS = {
-            '20': { label: 'Last 20', query: 'limit=20', refreshMs: 3000, isLive: true },
-            '1h': { label: 'Last 1 Hour', query: 'hours=1', refreshMs: 5000, isLive: true },
-            '24h': { label: 'Last 24 Hours', query: 'hours=24', refreshMs: 15000, isLive: true },
-            '2d': { label: 'Last 2 Days', query: 'hours=48', refreshMs: 20000, isLive: true }
+            '20': { label: 'Last 20', query: 'limit=20', refreshMs: 4000, isLive: true, hoursParam: 1 },
+            '1h': { label: 'Last 1 Hour', query: 'hours=1', refreshMs: 5000, isLive: true, hoursParam: 1 },
+            '24h': { label: 'Last 24 Hours', query: 'hours=24', refreshMs: 15000, isLive: true, hoursParam: 24 },
+            '2d': { label: 'Last 2 Days', query: 'hours=48', refreshMs: 20000, isLive: true, hoursParam: 48 }
         };
 
         function toLocalInputString(date) {
@@ -1515,16 +1875,16 @@
             return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
         }
 
-        // ─── Chart Setup ─── 
-        function initChart() {
+        // ─── Chart 1 Initialization (Temp, Humid & Plug Triggers) ───
+        function initHistoryChart() {
             const ctx = document.getElementById('historyChart').getContext('2d');
 
-            const tempGradient = ctx.createLinearGradient(0, 0, 0, 280);
-            tempGradient.addColorStop(0, 'rgba(249, 115, 22, 0.25)');
+            const tempGradient = ctx.createLinearGradient(0, 0, 0, 300);
+            tempGradient.addColorStop(0, 'rgba(249, 115, 22, 0.28)');
             tempGradient.addColorStop(1, 'rgba(249, 115, 22, 0)');
 
-            const humidGradient = ctx.createLinearGradient(0, 0, 0, 280);
-            humidGradient.addColorStop(0, 'rgba(6, 182, 212, 0.2)');
+            const humidGradient = ctx.createLinearGradient(0, 0, 0, 300);
+            humidGradient.addColorStop(0, 'rgba(6, 182, 212, 0.24)');
             humidGradient.addColorStop(1, 'rgba(6, 182, 212, 0)');
 
             historyChart = new Chart(ctx, {
@@ -1561,6 +1921,18 @@
                             pointBorderWidth: 2,
                             pointHoverRadius: 6,
                             yAxisID: 'yHumid'
+                        },
+                        {
+                            label: 'Plug Trigger Events ⚡',
+                            data: [],
+                            borderColor: 'rgba(255, 255, 255, 0.9)',
+                            backgroundColor: '#818cf8',
+                            showLine: false,
+                            pointRadius: 0,
+                            pointHoverRadius: 13,
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 2,
+                            yAxisID: 'yTemp'
                         }
                     ]
                 },
@@ -1568,7 +1940,7 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: {
-                        mode: 'index',
+                        mode: 'nearest',
                         intersect: false
                     },
                     plugins: {
@@ -1580,41 +1952,50 @@
                                 color: '#9ca3af',
                                 font: { family: 'Inter', size: 11, weight: '500' },
                                 boxWidth: 12,
-                                boxHeight: 3,
+                                boxHeight: 4,
                                 borderRadius: 2,
                                 useBorderRadius: true,
-                                padding: 16
+                                padding: 14
                             }
                         },
                         tooltip: {
                             backgroundColor: 'rgba(17, 24, 39, 0.95)',
                             titleColor: '#f9fafb',
                             bodyColor: '#9ca3af',
-                            borderColor: 'rgba(75, 85, 99, 0.3)',
+                            borderColor: 'rgba(75, 85, 99, 0.4)',
                             borderWidth: 1,
                             cornerRadius: 8,
                             padding: 12,
                             titleFont: { family: 'Inter', weight: '600' },
                             bodyFont: { family: 'Inter' },
-                            displayColors: true,
-                            boxPadding: 4,
                             callbacks: {
                                 title: function (items) {
                                     if (!items || !items.length) return '';
                                     const idx = items[0].dataIndex;
                                     const rawIso = currentRawTimestamps[idx];
-                                    if (rawIso) {
-                                        return formatDateTime(rawIso);
-                                    }
-                                    return items[0].label;
+                                    return rawIso ? formatDateTime(rawIso) : items[0].label;
                                 },
                                 label: function (context) {
+                                    if (context.datasetIndex === 2) {
+                                        const evList = context.dataset.triggerEvents ? context.dataset.triggerEvents[context.dataIndex] : null;
+                                        if (evList && evList.length > 0) {
+                                            return evList.map(ev => {
+                                                const icon = ev.plug_name === 'sprinkler' ? '🌱' : ev.plug_name === 'ac' ? '❄️' : '🔥';
+                                                const actionStr = (ev.requested_action || '').toUpperCase();
+                                                const statusStr = ev.success ? '✓' : '⚠️ FAILED';
+                                                const src = (ev.trigger_source || 'manual').toUpperCase();
+                                                const reasonStr = ev.reason ? ` - ${ev.reason}` : '';
+                                                return `${icon} ${ev.plug_name.toUpperCase()} -> ${actionStr} (${statusStr}) [${src}]${reasonStr}`;
+                                            });
+                                        }
+                                        return 'Plug Trigger Event';
+                                    }
                                     let label = context.dataset.label || '';
                                     if (label) label += ': ';
                                     if (context.parsed.y !== null) {
                                         label += context.parsed.y.toFixed(2);
                                         if (context.datasetIndex === 0) label += ' °C';
-                                        else label += ' %';
+                                        else if (context.datasetIndex === 1) label += ' %';
                                     }
                                     return label;
                                 }
@@ -1623,46 +2004,139 @@
                     },
                     scales: {
                         x: {
-                            grid: {
-                                color: 'rgba(75, 85, 99, 0.1)',
-                                drawBorder: false
-                            },
-                            ticks: {
-                                color: '#6b7280',
-                                font: { family: 'Inter', size: 10 },
-                                maxRotation: 45,
-                                maxTicksLimit: 12
-                            }
+                            grid: { color: 'rgba(75, 85, 99, 0.1)', drawBorder: false },
+                            ticks: { color: '#6b7280', font: { family: 'Inter', size: 10 }, maxRotation: 45, maxTicksLimit: 12 }
                         },
                         yTemp: {
                             type: 'linear',
                             position: 'left',
-                            grid: {
-                                color: 'rgba(75, 85, 99, 0.1)',
-                                drawBorder: false
-                            },
-                            ticks: {
-                                color: '#fb923c',
-                                font: { family: 'Inter', size: 10 },
-                                callback: v => v + '°C'
-                            }
+                            grid: { color: 'rgba(75, 85, 99, 0.1)', drawBorder: false },
+                            ticks: { color: '#fb923c', font: { family: 'Inter', size: 10 }, callback: v => v + '°C' }
                         },
                         yHumid: {
                             type: 'linear',
                             position: 'right',
                             grid: { drawOnChartArea: false },
-                            ticks: {
-                                color: '#22d3ee',
-                                font: { family: 'Inter', size: 10 },
-                                callback: v => v + '%'
-                            }
+                            ticks: { color: '#22d3ee', font: { family: 'Inter', size: 10 }, callback: v => v + '%' }
                         }
                     }
                 }
             });
         }
 
-        // ─── Format timestamps ─── 
+        // ─── Chart 2 Initialization (Dedicated Smart Plug State Timeline) ───
+        function initPlugHistoryChart() {
+            const ctx = document.getElementById('plugHistoryChart').getContext('2d');
+
+            plugHistoryChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: '🌱 Sprinkler',
+                            plugKey: 'sprinkler',
+                            data: [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                            borderWidth: 2.5,
+                            stepped: 'before',
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 8,
+                            pointBackgroundColor: '#10b981'
+                        },
+                        {
+                            label: '❄️ Air Conditioner',
+                            plugKey: 'ac',
+                            data: [],
+                            borderColor: '#06b6d4',
+                            backgroundColor: 'rgba(6, 182, 212, 0.12)',
+                            borderWidth: 2.5,
+                            stepped: 'before',
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 8,
+                            pointBackgroundColor: '#06b6d4'
+                        },
+                        {
+                            label: '🔥 Space Heater',
+                            plugKey: 'heater',
+                            data: [],
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                            borderWidth: 2.5,
+                            stepped: 'before',
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 8,
+                            pointBackgroundColor: '#f59e0b'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'nearest',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                color: '#9ca3af',
+                                font: { family: 'Inter', size: 11, weight: '500' },
+                                boxWidth: 14,
+                                boxHeight: 4,
+                                padding: 14
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                            titleColor: '#f9fafb',
+                            bodyColor: '#9ca3af',
+                            borderColor: 'rgba(75, 85, 99, 0.4)',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            padding: 10,
+                            callbacks: {
+                                label: function (context) {
+                                    const stateStr = context.parsed.y === 1 ? 'ON' : 'OFF';
+                                    return `${context.dataset.label}: ${stateStr}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(75, 85, 99, 0.1)', drawBorder: false },
+                            ticks: { color: '#6b7280', font: { family: 'Inter', size: 10 }, maxRotation: 45, maxTicksLimit: 12 }
+                        },
+                        y: {
+                            type: 'linear',
+                            min: -0.1,
+                            max: 1.1,
+                            ticks: {
+                                stepSize: 1,
+                                color: '#9ca3af',
+                                font: { family: 'Inter', size: 10 },
+                                callback: function (val) {
+                                    if (val === 0) return 'OFF';
+                                    if (val === 1) return 'ON';
+                                    return '';
+                                }
+                            },
+                            grid: { color: 'rgba(75, 85, 99, 0.15)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ─── Format Timestamps ───
         function formatDateTime(isoString) {
             try {
                 const d = new Date(isoString);
@@ -1690,7 +2164,6 @@
             }
         }
 
-        // ─── Update Status ─── 
         function setStatus(connected, text) {
             const badge = document.getElementById('statusBadge');
             const statusText = document.getElementById('statusText');
@@ -1698,14 +2171,7 @@
             statusText.textContent = text;
         }
 
-        // ─── Animate Value ─── 
-        function animateValue(el) {
-            el.classList.remove('value-updated');
-            void el.offsetWidth;
-            el.classList.add('value-updated');
-        }
-
-        // ─── Update Latest Reading (Real-time gauges) ─── 
+        // ─── Real-Time Sensor Gauges Polling ───
         async function fetchLatest() {
             try {
                 const res = await fetch('/api/readings/latest');
@@ -1716,31 +2182,18 @@
                     return;
                 }
 
-                const tempEl = document.getElementById('tempValue');
-                const humidEl = document.getElementById('humidValue');
-
-                tempEl.innerHTML = data.temperature.toFixed(1) + '<span class="gauge-unit"> °C</span>';
-                humidEl.innerHTML = data.humidity.toFixed(1) + '<span class="gauge-unit"> %</span>';
-
-                if (data.id !== lastReadingId) {
-                    animateValue(tempEl);
-                    animateValue(humidEl);
-                    lastReadingId = data.id;
-                }
+                document.getElementById('tempValue').innerHTML = data.temperature.toFixed(1) + '<span class="gauge-unit"> °C</span>';
+                document.getElementById('humidValue').innerHTML = data.humidity.toFixed(1) + '<span class="gauge-unit"> %</span>';
 
                 const timeStr = formatDateTime(data.timestamp);
                 document.getElementById('tempTimestamp').textContent = 'Last updated: ' + timeStr;
                 document.getElementById('humidTimestamp').textContent = 'Last updated: ' + timeStr;
-
                 document.getElementById('totalReadings').textContent = data.total_readings.toLocaleString();
 
                 setStatus(true, 'Receiving data');
                 document.getElementById('serverStatus').textContent = 'Online';
                 document.getElementById('serverStatus').className = 'stat-value accent-success';
-                document.getElementById('serverStatus').style.color = '';
-
             } catch (err) {
-                console.error('Failed to fetch latest:', err);
                 setStatus(false, 'Server unreachable');
                 document.getElementById('serverStatus').textContent = 'Offline';
                 document.getElementById('serverStatus').className = 'stat-value';
@@ -1748,36 +2201,179 @@
             }
         }
 
-        // ─── Update History / Range ─── 
+        // ─── Phase 2: Fetch and Render Smart Plugs Status ───
+        async function fetchPlugs() {
+            try {
+                const res = await fetch('/api/plugs');
+                if (!res.ok) return;
+                const plugs = await res.json();
+
+                for (const plug of plugs) {
+                    const name = plug.plug_name;
+                    const card = document.getElementById(`card-${name}`);
+                    const badge = document.getElementById(`badge-${name}`);
+                    const stateEl = document.getElementById(`state-${name}`);
+                    const verifiedEl = document.getElementById(`verified-${name}`);
+                    const ipEl = document.getElementById(`ip-${name}`);
+                    const reasonEl = document.getElementById(`reason-${name}`);
+                    const timeEl = document.getElementById(`time-${name}`);
+
+                    const curState = (plug.current_state || 'UNKNOWN').toUpperCase();
+                    currentPlugsStatusMap[name] = curState;
+
+                    if (!card) continue;
+
+                    if (ipEl && plug.ip) ipEl.textContent = plug.ip;
+
+                    if (stateEl) stateEl.textContent = curState;
+
+                    // Update badge style
+                    if (badge) {
+                        badge.className = 'plug-state-badge ' + (curState === 'ON' ? 'is-on' : curState === 'OFF' ? 'is-off' : 'is-unknown');
+                    }
+
+                    // Update card border style
+                    card.className = 'plug-card ' + (curState === 'ON' ? 'state-on' : curState === 'OFF' ? 'state-off' : 'state-unknown');
+
+                    // Verification label
+                    if (verifiedEl) {
+                        if (plug.is_verified) {
+                            verifiedEl.className = 'verified-tag verified';
+                            verifiedEl.textContent = '✓ Hardware Verified';
+                        } else {
+                            verifiedEl.className = 'verified-tag unverified';
+                            verifiedEl.textContent = 'Unverified';
+                        }
+                    }
+
+                    if (reasonEl) {
+                        reasonEl.textContent = plug.last_attempted_action ? `${plug.last_attempted_action} (${plug.last_action_result || 'DONE'})` : '--';
+                    }
+
+                    if (timeEl && plug.updated_at) {
+                        timeEl.textContent = formatDateTime(plug.updated_at);
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching plugs:', err);
+            }
+        }
+
+        // ─── Manual Plug Control Action ───
+        async function togglePlug(plugName, action) {
+            const btnOn = document.getElementById(`btn-on-${plugName}`);
+            const btnOff = document.getElementById(`btn-off-${plugName}`);
+
+            if (btnOn) btnOn.disabled = true;
+            if (btnOff) btnOff.disabled = true;
+
+            showToast(`Sending command: ${action.toUpperCase()} to ${plugName}…`, 'info');
+
+            // Optimistically update status map
+            currentPlugsStatusMap[plugName] = action.toUpperCase();
+
+            try {
+                const res = await fetch(`/api/plugs/${plugName}/${action}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast(data.message || `Plug ${plugName} turned ${action.toUpperCase()}!`, 'success');
+                } else {
+                    showToast(data.message || `Failed to turn ${action.toUpperCase()} ${plugName}.`, 'error');
+                }
+
+                // Short pause to guarantee database transaction committed
+                await new Promise(r => setTimeout(r, 250));
+
+                await fetchPlugs();
+                await fetchHistory();
+                await fetchPlugHistoryLog();
+            } catch (err) {
+                console.error('Control error:', err);
+                showToast(`Network error communicating with plug ${plugName}`, 'error');
+            } finally {
+                if (btnOn) btnOn.disabled = false;
+                if (btnOff) btnOff.disabled = false;
+            }
+        }
+
+        // ─── Manual Automation Rule Evaluation Trigger ───
+        async function triggerAutomation() {
+            const btn = document.getElementById('btnEvalNow');
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Evaluating…</span>';
+
+            try {
+                const res = await fetch('/api/automation/evaluate', { method: 'POST' });
+                const data = await res.json();
+
+                const actionsCount = data.actions_taken ? data.actions_taken.length : 0;
+                showToast(data.message || `Automation evaluated: ${actionsCount} actions taken.`, actionsCount > 0 ? 'success' : 'info');
+
+                const autoLast = document.getElementById('autoLastEval');
+                if (autoLast) {
+                    autoLast.textContent = `Last eval: ${formatDateTime(data.timestamp)}`;
+                }
+
+                await new Promise(r => setTimeout(r, 250));
+                await fetchPlugs();
+                await fetchHistory();
+                await fetchPlugHistoryLog();
+            } catch (err) {
+                console.error('Eval error:', err);
+                showToast('Failed to trigger automation evaluation.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>⚡ Evaluate Automation Now</span>';
+            }
+        }
+
+        // ─── History & Timeline Fetching ───
         async function fetchHistory() {
             let url = '/api/readings/history?';
+            let timelineUrl = '/api/plugs/timeline?';
+
             if (rangeMode === 'custom') {
-                url += `start_time=${encodeURIComponent(customStartDate)}&end_time=${encodeURIComponent(customEndDate)}`;
+                const q = `start_time=${encodeURIComponent(customStartDate)}&end_time=${encodeURIComponent(customEndDate)}`;
+                url += q;
+                timelineUrl += q;
             } else {
                 const config = PRESETS[currentPreset] || PRESETS['20'];
                 url += config.query;
+                if (config.hoursParam) {
+                    timelineUrl += `hours=${config.hoursParam}`;
+                }
             }
 
             try {
-                const res = await fetch(url);
-                const data = await res.json();
+                const [readingsRes, timelineRes] = await Promise.all([
+                    fetch(url),
+                    fetch(timelineUrl)
+                ]);
 
-                renderHistory(data);
+                const readingsData = await readingsRes.json();
+                const timelineData = await timelineRes.json();
+
+                renderHistory(readingsData, timelineData);
             } catch (err) {
                 console.error('Failed to fetch history:', err);
             }
         }
 
-        function renderHistory(data) {
+        // ─── Render Chart 1 & Chart 2 ───
+        function renderHistory(data, timelineEvents = []) {
             const overlay = document.getElementById('chartEmptyOverlay');
             const countLabel = document.getElementById('rangeCountLabel');
             const tempStats = document.getElementById('tempRangeStats');
             const humidStats = document.getElementById('humidRangeStats');
+            const triggerCountStats = document.getElementById('triggerCountStats');
             const modeBadge = document.getElementById('rangeModeBadge');
             const modeText = document.getElementById('rangeModeText');
             const btnResume = document.getElementById('btnResumeLive');
 
-            // Update mode indicator
             if (rangeMode === 'custom') {
                 modeBadge.className = 'range-badge historical';
                 modeText.textContent = 'HISTORICAL SNAPSHOT';
@@ -1788,7 +2384,6 @@
                 btnResume.style.display = 'none';
             }
 
-            // Update range statistics ribbon
             if (data.stats && data.stats.min_temp !== null) {
                 tempStats.textContent = `Min ${data.stats.min_temp.toFixed(1)}° • Avg ${data.stats.avg_temp.toFixed(1)}° • Max ${data.stats.max_temp.toFixed(1)}°C`;
                 humidStats.textContent = `Min ${data.stats.min_humid.toFixed(1)}% • Avg ${data.stats.avg_humid.toFixed(1)}% • Max ${data.stats.max_humid.toFixed(1)}%`;
@@ -1797,54 +2392,119 @@
                 humidStats.textContent = '--';
             }
 
+            const events = Array.isArray(timelineEvents) ? timelineEvents : [];
+            currentTimelineEvents = events;
+
             if (!data.readings || data.readings.length === 0) {
                 overlay.style.display = 'flex';
                 countLabel.textContent = '0 readings found in selected window';
                 historyChart.data.labels = [];
                 historyChart.data.datasets[0].data = [];
                 historyChart.data.datasets[1].data = [];
+                historyChart.data.datasets[2].data = [];
                 historyChart.update();
-
-                document.getElementById('tableContainer').innerHTML = `
-                    <div class="no-data">
-                        <div class="no-data-icon">📡</div>
-                        <div class="no-data-text">No sensor readings found in this time range.</div>
-                        <div class="no-data-sub">Select a broader date range or return to live view.</div>
-                    </div>
-                `;
+                renderPlugStateChart([], events, []);
                 return;
             }
 
             overlay.style.display = 'none';
 
-            // Readings count label
-            if (data.is_sampled) {
-                countLabel.textContent = `Showing ${data.count.toLocaleString()} points (sampled from ${data.total_matching.toLocaleString()} readings)`;
-            } else {
-                countLabel.textContent = `Showing ${data.count.toLocaleString()} readings`;
-            }
+            countLabel.textContent = data.is_sampled
+                ? `Showing ${data.count.toLocaleString()} points (sampled from ${data.total_matching.toLocaleString()} readings)`
+                : `Showing ${data.count.toLocaleString()} readings`;
 
-            // Reverse readings for chart (oldest → newest)
+            // Chronological order (oldest → newest)
             const chronological = [...data.readings].reverse();
             currentRawTimestamps = chronological.map(r => r.timestamp);
 
-            // Compute span for dynamic x-axis label formatting
             const firstTime = new Date(chronological[0].timestamp).getTime();
             const lastTime = new Date(chronological[chronological.length - 1].timestamp).getTime();
             const spanHours = (lastTime - firstTime) / (1000 * 3600);
 
-            historyChart.data.labels = chronological.map(r => formatChartLabel(new Date(r.timestamp), spanHours));
+            const labels = chronological.map(r => formatChartLabel(new Date(r.timestamp), spanHours));
+
+            historyChart.data.labels = labels;
             historyChart.data.datasets[0].data = chronological.map(r => r.temperature);
             historyChart.data.datasets[1].data = chronological.map(r => r.humidity);
+
+            // ─── Map Plug Trigger Markers on Chart 1 ───
+            const triggerData = new Array(chronological.length).fill(null);
+            const pointRadii = new Array(chronological.length).fill(0);
+            const pointHoverRadii = new Array(chronological.length).fill(0);
+            const pointStyles = new Array(chronological.length).fill('circle');
+            const pointBgColors = new Array(chronological.length).fill('#818cf8');
+            const triggerEventsMap = new Array(chronological.length).fill(null);
+
+            let visibleTriggerCount = 0;
+
+            if (events.length > 0 && chronological.length > 0) {
+                // Filter events that fall within or near the graph timeframe (with 5 min grace window)
+                for (const ev of events) {
+                    const evTime = new Date(ev.created_at).getTime();
+                    if (isNaN(evTime)) continue;
+
+                    // If event happened way before the start of this graph, don't pin to index 0
+                    if (evTime < firstTime - 300000) continue;
+
+                    visibleTriggerCount++;
+
+                    // Find closest reading index in chronological array
+                    let closestIdx = chronological.length - 1;
+                    let minDiff = Infinity;
+                    for (let i = 0; i < chronological.length; i++) {
+                        const rTime = new Date(chronological[i].timestamp).getTime();
+                        const diff = Math.abs(rTime - evTime);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            closestIdx = i;
+                        }
+                    }
+
+                    // Assign numeric temperature value for Chart.js rendering
+                    triggerData[closestIdx] = chronological[closestIdx].temperature;
+                    pointRadii[closestIdx] = 10;
+                    pointHoverRadii[closestIdx] = 14;
+
+                    if (!triggerEventsMap[closestIdx]) {
+                        triggerEventsMap[closestIdx] = [];
+                    }
+                    triggerEventsMap[closestIdx].push(ev);
+
+                    const isTurnOn = (ev.requested_action || '').toUpperCase() === 'ON';
+                    pointStyles[closestIdx] = isTurnOn ? 'triangle' : 'rectRot';
+
+                    if (ev.plug_name === 'sprinkler') {
+                        pointBgColors[closestIdx] = isTurnOn ? '#10b981' : '#047857';
+                    } else if (ev.plug_name === 'ac') {
+                        pointBgColors[closestIdx] = isTurnOn ? '#06b6d4' : '#0284c7';
+                    } else {
+                        pointBgColors[closestIdx] = isTurnOn ? '#f59e0b' : '#b45309';
+                    }
+                }
+            }
+
+            if (triggerCountStats) {
+                triggerCountStats.textContent = `${visibleTriggerCount} trigger${visibleTriggerCount === 1 ? '' : 's'}`;
+            }
+
+            historyChart.data.datasets[2].data = triggerData;
+            historyChart.data.datasets[2].pointRadius = pointRadii;
+            historyChart.data.datasets[2].pointHoverRadius = pointHoverRadii;
+            historyChart.data.datasets[2].pointStyle = pointStyles;
+            historyChart.data.datasets[2].pointBackgroundColor = pointBgColors;
+            historyChart.data.datasets[2].triggerEvents = triggerEventsMap;
             historyChart.update('none');
 
-            // Update table (newest first, up to 20)
-            const rows = data.readings.slice(0, 20).map(r => `
+            // Render Chart 2 (Smart Plug Stepped Timeline)
+            renderPlugStateChart(labels, events, chronological);
+
+            // Render Readings Table
+            const rows = data.readings.slice(0, 15).map(r => `
                 <tr>
                     <td>${formatDateTime(r.timestamp)}</td>
-                    <td>${r.temperature.toFixed(2)} °C</td>
-                    <td>${r.humidity.toFixed(2)} %</td>
-                    <td style="color: var(--text-muted)">#${r.id}</td>
+                    <td style="color:var(--temp-color); font-weight:600;">${r.temperature.toFixed(2)} °C</td>
+                    <td style="color:var(--humid-color); font-weight:600;">${r.humidity.toFixed(2)} %</td>
+                    <td style="color:var(--text-muted)">#${r.id}</td>
                 </tr>
             `).join('');
 
@@ -1863,7 +2523,181 @@
             `;
         }
 
-        // ─── Preset Selection ─── 
+        // ─── Render Chart 2: Stepped Line Plug States ───
+        function renderPlugStateChart(labels, events, readings) {
+            const overlay = document.getElementById('plugChartEmptyOverlay');
+            if (!readings || readings.length === 0) {
+                if (events && events.length > 0) {
+                    readings = events.map(e => ({ timestamp: e.created_at }));
+                    labels = events.map(e => formatChartLabel(new Date(e.created_at), 1));
+                } else {
+                    overlay.style.display = 'flex';
+                    plugHistoryChart.data.labels = [];
+                    plugHistoryChart.data.datasets[0].data = [];
+                    plugHistoryChart.data.datasets[1].data = [];
+                    plugHistoryChart.data.datasets[2].data = [];
+                    plugHistoryChart.update();
+                    return;
+                }
+            }
+
+            overlay.style.display = 'none';
+            plugHistoryChart.data.labels = labels;
+
+            const plugs = ['sprinkler', 'ac', 'heater'];
+            const datasetsData = { sprinkler: [], ac: [], heater: [] };
+            const datasetsRadii = { sprinkler: [], ac: [], heater: [] };
+            const firstTime = new Date(readings[0].timestamp).getTime();
+
+            for (const plug of plugs) {
+                // Chronologically sorted events for this plug
+                const plugEvents = events
+                    .filter(e => e.plug_name === plug)
+                    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+                // Determine baseline state before the first reading in this chart view
+                let curState = 0; // default OFF
+
+                // 1. Check if there's any event before firstTime
+                let hadPriorEvent = false;
+                for (const ev of plugEvents) {
+                    const evTime = new Date(ev.created_at).getTime();
+                    if (evTime < firstTime) {
+                        curState = (ev.resulting_state === 'ON' || ev.requested_action === 'ON') ? 1 : 0;
+                        hadPriorEvent = true;
+                    }
+                }
+
+                // 2. If no event before firstTime, check if earliest event in window was ON or OFF
+                if (!hadPriorEvent && plugEvents.length > 0) {
+                    const firstEv = plugEvents[0];
+                    curState = (firstEv.requested_action === 'ON') ? 0 : 1;
+                } else if (!hadPriorEvent && currentPlugsStatusMap[plug]) {
+                    curState = (currentPlugsStatusMap[plug] === 'ON') ? 1 : 0;
+                }
+
+                const series = [];
+                const radii = [];
+                let prevPointState = curState;
+
+                for (let i = 0; i < readings.length; i++) {
+                    const rTime = new Date(readings[i].timestamp).getTime();
+
+                    // Apply all events that happened up to this reading time
+                    for (const ev of plugEvents) {
+                        const evTime = new Date(ev.created_at).getTime();
+                        if (evTime <= rTime) {
+                            curState = (ev.resulting_state === 'ON' || ev.requested_action === 'ON') ? 1 : 0;
+                        }
+                    }
+
+                    // For the latest reading (right edge), also check if any event occurred just now (evTime > rTime)
+                    // OR align with active plug state from device status poll
+                    if (i === readings.length - 1) {
+                        for (const ev of plugEvents) {
+                            const evTime = new Date(ev.created_at).getTime();
+                            if (evTime > rTime) {
+                                curState = (ev.resulting_state === 'ON' || ev.requested_action === 'ON') ? 1 : 0;
+                            }
+                        }
+                        if (currentPlugsStatusMap[plug] && currentPlugsStatusMap[plug] !== 'UNKNOWN') {
+                            curState = (currentPlugsStatusMap[plug] === 'ON') ? 1 : 0;
+                        }
+                    }
+
+                    series.push(curState);
+
+                    // Add a prominent point marker where state changed or at the latest active point
+                    if (curState !== prevPointState || i === readings.length - 1) {
+                        radii.push(6);
+                    } else {
+                        radii.push(0);
+                    }
+                    prevPointState = curState;
+                }
+
+                datasetsData[plug] = series;
+                datasetsRadii[plug] = radii;
+            }
+
+            plugHistoryChart.data.datasets[0].data = datasetsData.sprinkler;
+            plugHistoryChart.data.datasets[0].pointRadius = datasetsRadii.sprinkler;
+
+            plugHistoryChart.data.datasets[1].data = datasetsData.ac;
+            plugHistoryChart.data.datasets[1].pointRadius = datasetsRadii.ac;
+
+            plugHistoryChart.data.datasets[2].data = datasetsData.heater;
+            plugHistoryChart.data.datasets[2].pointRadius = datasetsRadii.heater;
+
+            plugHistoryChart.update('none');
+        }
+
+
+        // ─── Fetch and Render Plug Action History Log Table ───
+        async function fetchPlugHistoryLog() {
+            try {
+                const res = await fetch('/api/plugs/history?limit=15');
+                if (!res.ok) return;
+                const records = await res.json();
+
+                const container = document.getElementById('plugTableContainer');
+                if (!records || records.length === 0) {
+                    container.innerHTML = `
+                        <div class="no-data">
+                            <div class="no-data-icon">📋</div>
+                            <div class="no-data-text">No plug actions recorded yet.</div>
+                            <div class="no-data-sub">Manual and automated commands will be archived here.</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const rows = records.map(r => {
+                    const icon = r.plug_name === 'sprinkler' ? '🌱' : r.plug_name === 'ac' ? '❄️' : '🔥';
+                    const actionClass = r.requested_action === 'ON' ? 'tag-status-ok' : 'tag-status-err';
+                    const srcClass = r.trigger_source === 'automation' ? 'tag-source automation' : 'tag-source manual';
+                    const verifiedIcon = r.resulting_state ? '✓' : '⚠️';
+                    const envText = (r.temperature !== null && r.humidity !== null)
+                        ? `${r.temperature.toFixed(1)}°C, ${r.humidity.toFixed(1)}%`
+                        : '--';
+
+                    return `
+                        <tr>
+                            <td>${formatDateTime(r.created_at)}</td>
+                            <td><strong>${icon} ${r.plug_name.toUpperCase()}</strong></td>
+                            <td class="${actionClass}"><strong>${r.requested_action}</strong></td>
+                            <td><span class="${srcClass}">${r.trigger_source}</span></td>
+                            <td>${verifiedIcon} ${r.resulting_state || 'FAILED'}</td>
+                            <td style="color:var(--text-muted); font-size:0.75rem;">${envText}</td>
+                            <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.reason || ''}">
+                                ${r.reason || '--'}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                container.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Plug</th>
+                                <th>Action</th>
+                                <th>Source</th>
+                                <th>Verified State</th>
+                                <th>Env Avg</th>
+                                <th>Decision Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                `;
+            } catch (err) {
+                console.error('Error fetching plug history log:', err);
+            }
+        }
+
+        // ─── Preset & Custom Range Controls ───
         function selectPreset(key) {
             rangeMode = 'preset';
             currentPreset = key;
@@ -1879,7 +2713,6 @@
             fetchHistory();
         }
 
-        // ─── Custom Range Drawer & Validation ─── 
         function toggleCustomRange() {
             const panel = document.getElementById('customRangePanel');
             const isOpen = panel.classList.contains('open');
@@ -1904,21 +2737,13 @@
             const endVal = document.getElementById('customEnd').value;
             const errorEl = document.getElementById('rangeErrorMsg');
 
-            if (!startVal) {
-                errorEl.textContent = 'Please choose a start date & time.';
-                errorEl.style.display = 'block';
-                return;
-            }
-            if (!endVal) {
-                errorEl.textContent = 'Please choose an end date & time.';
+            if (!startVal || !endVal) {
+                errorEl.textContent = 'Please choose both start and end date & time.';
                 errorEl.style.display = 'block';
                 return;
             }
 
-            const startDate = new Date(startVal);
-            const endDate = new Date(endVal);
-
-            if (startDate >= endDate) {
+            if (new Date(startVal) >= new Date(endVal)) {
                 errorEl.textContent = 'Start time must be before end time.';
                 errorEl.style.display = 'block';
                 return;
@@ -1938,7 +2763,7 @@
 
         function setCustomShortcut(shortcut) {
             const now = new Date();
-            let start;
+            let start = new Date(now.getTime() - 24 * 3600 * 1000);
             let end = now;
 
             if (shortcut === 'today') {
@@ -1959,11 +2784,17 @@
             selectPreset('20');
         }
 
-        // ─── Polling Management ─── 
+        // ─── Polling Management ───
         function startLivePolling() {
             fetchLatest();
+            fetchPlugs();
+            fetchPlugHistoryLog();
+
             if (liveGaugeInterval) clearInterval(liveGaugeInterval);
             liveGaugeInterval = setInterval(fetchLatest, 3000);
+
+            if (plugPollInterval) clearInterval(plugPollInterval);
+            plugPollInterval = setInterval(fetchPlugs, 4000);
         }
 
         function restartChartPolling() {
@@ -1983,23 +2814,11 @@
             }
         }
 
-        // ─── Clear History Logic ─── 
+        // ─── Clear Sensor History Modal Logic ───
         function openClearModal() {
             const modal = document.getElementById('clearModalBackdrop');
             modal.classList.add('active');
-
-            const radio1h = document.querySelector('input[name="clearScope"][value="1h"]');
-            if (radio1h) radio1h.checked = true;
             onClearOptionChange();
-
-            const now = new Date();
-            const oneDayAgo = new Date(now.getTime() - 24 * 3600 * 1000);
-            const startInput = document.getElementById('clearStartInput');
-            const endInput = document.getElementById('clearEndInput');
-            if (startInput && !startInput.value) startInput.value = toLocalInputString(oneDayAgo);
-            if (endInput && !endInput.value) endInput.value = toLocalInputString(now);
-
-            document.getElementById('clearErrorBox').style.display = 'none';
         }
 
         function closeClearModal() {
@@ -2008,9 +2827,7 @@
         }
 
         function handleBackdropClick(e) {
-            if (e.target.id === 'clearModalBackdrop') {
-                closeClearModal();
-            }
+            if (e.target.id === 'clearModalBackdrop') closeClearModal();
         }
 
         function onClearOptionChange() {
@@ -2020,13 +2837,13 @@
             const confirmBtn = document.getElementById('btnConfirmDelete');
 
             if (selected === 'custom') {
-                customFields.style.display = 'flex';
+                customFields.style.display = 'grid';
                 warningBox.textContent = '⚠️ All readings within the specified date/time window will be permanently deleted.';
                 warningBox.className = 'clear-warning-box';
                 confirmBtn.innerHTML = '<span>🗑️ Delete Custom Range</span>';
             } else if (selected === 'all') {
                 customFields.style.display = 'none';
-                warningBox.textContent = '🚨 WARNING: This will permanently erase ALL sensor readings from the SQLite database. Total readings will be reset to 0.';
+                warningBox.textContent = '🚨 WARNING: This will permanently erase ALL sensor readings from the SQLite database. Total readings will reset to 0.';
                 warningBox.className = 'clear-warning-box danger';
                 confirmBtn.innerHTML = '<span>⚠️ Wipe All History</span>';
             } else if (selected === '1h') {
@@ -2036,7 +2853,7 @@
                 confirmBtn.innerHTML = '<span>🗑️ Delete Last 1 Hour</span>';
             } else if (selected === '24h') {
                 customFields.style.display = 'none';
-                warningBox.textContent = '⚠️ Readings logged in the last 24 hours (1 day) will be permanently deleted from SQLite (sensor_data.db).';
+                warningBox.textContent = '⚠️ Readings logged in the last 24 hours will be permanently deleted from SQLite (sensor_data.db).';
                 warningBox.className = 'clear-warning-box';
                 confirmBtn.innerHTML = '<span>🗑️ Delete Last 1 Day</span>';
             }
@@ -2048,12 +2865,7 @@
             const confirmBtn = document.getElementById('btnConfirmDelete');
             errorBox.style.display = 'none';
 
-            let payload = {
-                clear_all: false,
-                hours: null,
-                start_time: null,
-                end_time: null
-            };
+            let payload = { clear_all: false, hours: null, start_time: null, end_time: null };
 
             if (selected === 'all') {
                 payload.clear_all = true;
@@ -2064,13 +2876,8 @@
             } else if (selected === 'custom') {
                 const startVal = document.getElementById('clearStartInput').value;
                 const endVal = document.getElementById('clearEndInput').value;
-                if (!startVal || !endVal) {
-                    errorBox.textContent = 'Please choose both a start and end date/time.';
-                    errorBox.style.display = 'block';
-                    return;
-                }
-                if (new Date(startVal) >= new Date(endVal)) {
-                    errorBox.textContent = 'Start time must be before end time.';
+                if (!startVal || !endVal || new Date(startVal) >= new Date(endVal)) {
+                    errorBox.textContent = 'Please choose a valid start and end time.';
                     errorBox.style.display = 'block';
                     return;
                 }
@@ -2079,8 +2886,6 @@
             }
 
             confirmBtn.disabled = true;
-            confirmBtn.style.opacity = '0.6';
-
             try {
                 const res = await fetch('/api/readings/clear', {
                     method: 'POST',
@@ -2088,29 +2893,19 @@
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
-
-                if (res.ok) {
-                    closeClearModal();
-                    showToast(data.message, 'success');
-
-                    // Refresh live data and history chart immediately
-                    await fetchLatest();
-                    await fetchHistory();
-                } else {
-                    errorBox.textContent = data.detail || 'Failed to clear history.';
-                    errorBox.style.display = 'block';
-                }
+                closeClearModal();
+                showToast(data.message, 'success');
+                await fetchLatest();
+                await fetchHistory();
             } catch (err) {
-                console.error('Error clearing history:', err);
                 errorBox.textContent = 'Server connection error.';
                 errorBox.style.display = 'block';
             } finally {
                 confirmBtn.disabled = false;
-                confirmBtn.style.opacity = '1';
             }
         }
 
-        // ─── Toast Notifications ─── 
+        // ─── Toast Notifications ───
         function showToast(message, type = 'success') {
             let toast = document.getElementById('toastNotification');
             if (!toast) {
@@ -2120,23 +2915,22 @@
                 document.body.appendChild(toast);
             }
             toast.className = 'toast-notification ' + type + ' show';
-            toast.innerHTML = `<span style="font-size: 16px;">${type === 'success' ? '✓' : '⚠️'}</span><span>${message}</span>`;
+            const icon = type === 'success' ? '✓' : type === 'error' ? '❌' : 'ℹ️';
+            toast.innerHTML = `<span style="font-size: 16px;">${icon}</span><span>${message}</span>`;
 
             setTimeout(() => {
                 toast.classList.remove('show');
             }, 4500);
         }
 
-        // Close modal on Escape key
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                closeClearModal();
-            }
+            if (e.key === 'Escape') closeClearModal();
         });
 
-        // ─── Init ─── 
+        // ─── Initialization on DOM Load ───
         document.addEventListener('DOMContentLoaded', () => {
-            initChart();
+            initHistoryChart();
+            initPlugHistoryChart();
             startLivePolling();
             selectPreset('20');
         });

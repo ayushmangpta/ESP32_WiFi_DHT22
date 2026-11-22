@@ -17,10 +17,13 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sensor_data.
 
 async def init_db():
     """
-    Create the database and the 'readings' table if they don't exist.
-    Called once when the server starts up.
+    Create the database tables if they don't exist:
+    - 'readings': ESP32 DHT22 sensor readings
+    - 'smart_plug_state': Current verified / last known state of each plug
+    - 'smart_plug_history': Audit log of all manual and automated plug commands
     """
     async with aiosqlite.connect(DB_PATH) as db:
+        # 1. Sensor readings table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS readings (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,11 +32,52 @@ async def init_db():
                 timestamp   TEXT    NOT NULL
             )
         """)
-        # Index on timestamp for fast dashboard queries
         await db.execute("""
             CREATE INDEX IF NOT EXISTS idx_readings_timestamp 
             ON readings (timestamp DESC)
         """)
+
+        # 2. Smart plug current state table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS smart_plug_state (
+                plug_name              TEXT PRIMARY KEY,
+                current_state          TEXT NOT NULL DEFAULT 'UNKNOWN',
+                is_verified            INTEGER NOT NULL DEFAULT 0,
+                last_successful_check  TEXT,
+                last_attempted_action  TEXT,
+                last_action_result     TEXT,
+                updated_at             TEXT NOT NULL
+            )
+        """)
+
+        # 3. Smart plug event history table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS smart_plug_history (
+                id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                plug_name              TEXT NOT NULL,
+                plug_ip                TEXT,
+                requested_action       TEXT NOT NULL,
+                previous_state         TEXT,
+                resulting_state        TEXT,
+                success                INTEGER NOT NULL,
+                trigger_source         TEXT NOT NULL,
+                temperature            REAL,
+                humidity               REAL,
+                sensor_readings_count  INTEGER,
+                reason                 TEXT,
+                error_message          TEXT,
+                created_at             TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_plug_history_created 
+            ON smart_plug_history (created_at DESC)
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_plug_history_name 
+            ON smart_plug_history (plug_name, created_at DESC)
+        """)
+
         await db.commit()
     print(f"✓ Database ready at: {DB_PATH}")
 
@@ -325,5 +369,252 @@ async def delete_readings(
         await db.execute(f"DELETE FROM readings {where_clause}", params)
         await db.commit()
         return deleted_count
+
+
+# ─── Smart Plug Database Operations ───
+
+async def get_recent_readings_for_automation(limit: int = 30) -> List[dict]:
+    """
+    Get the most recent 'limit' sensor readings, newest first.
+    Used for 30-reading moving average calculations in automation rules.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, temperature, humidity, timestamp FROM readings ORDER BY id DESC LIMIT ?",
+            (limit,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "id": r["id"],
+                    "temperature": r["temperature"],
+                    "humidity": r["humidity"],
+                    "timestamp": r["timestamp"]
+                }
+                for r in rows
+            ]
+
+
+async def upsert_plug_state(
+    plug_name: str,
+    current_state: str,
+    is_verified: bool = False,
+    last_successful_check: Optional[str] = None,
+    last_attempted_action: Optional[str] = None,
+    last_action_result: Optional[str] = None
+) -> None:
+    """
+    Insert or update the current state record for a smart plug.
+    """
+    now_iso = datetime.now().isoformat()
+    verified_int = 1 if is_verified else 0
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM smart_plug_state WHERE plug_name = ?", (plug_name,)) as cursor:
+            existing = await cursor.fetchone()
+
+        if existing:
+            succ_check = last_successful_check or existing["last_successful_check"]
+            attempt_act = last_attempted_action or existing["last_attempted_action"]
+            act_res = last_action_result or existing["last_action_result"]
+
+            await db.execute("""
+                UPDATE smart_plug_state
+                SET current_state = ?,
+                    is_verified = ?,
+                    last_successful_check = ?,
+                    last_attempted_action = ?,
+                    last_action_result = ?,
+                    updated_at = ?
+                WHERE plug_name = ?
+            """, (current_state, verified_int, succ_check, attempt_act, act_res, now_iso, plug_name))
+        else:
+            await db.execute("""
+                INSERT INTO smart_plug_state (
+                    plug_name, current_state, is_verified,
+                    last_successful_check, last_attempted_action,
+                    last_action_result, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (plug_name, current_state, verified_int, last_successful_check, last_attempted_action, last_action_result, now_iso))
+
+        await db.commit()
+
+
+async def get_plug_state_record(plug_name: str) -> Optional[dict]:
+    """Get the current state record of a specific plug."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM smart_plug_state WHERE plug_name = ?",
+            (plug_name.lower().strip(),)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return {
+                    "plug_name": row["plug_name"],
+                    "current_state": row["current_state"],
+                    "is_verified": bool(row["is_verified"]),
+                    "last_successful_check": row["last_successful_check"],
+                    "last_attempted_action": row["last_attempted_action"],
+                    "last_action_result": row["last_action_result"],
+                    "updated_at": row["updated_at"]
+                }
+    return None
+
+
+async def get_all_plug_states() -> List[dict]:
+    """Get state records for all registered smart plugs."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM smart_plug_state ORDER BY plug_name ASC") as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "plug_name": r["plug_name"],
+                    "current_state": r["current_state"],
+                    "is_verified": bool(r["is_verified"]),
+                    "last_successful_check": r["last_successful_check"],
+                    "last_attempted_action": r["last_attempted_action"],
+                    "last_action_result": r["last_action_result"],
+                    "updated_at": r["updated_at"]
+                }
+                for r in rows
+            ]
+
+
+async def insert_plug_history(
+    plug_name: str,
+    plug_ip: Optional[str],
+    requested_action: str,
+    previous_state: Optional[str],
+    resulting_state: Optional[str],
+    success: bool,
+    trigger_source: str,
+    temperature: Optional[float] = None,
+    humidity: Optional[float] = None,
+    sensor_readings_count: Optional[int] = None,
+    reason: Optional[str] = None,
+    error_message: Optional[str] = None
+) -> int:
+    """Record an action attempt in smart_plug_history."""
+    now_iso = datetime.now().isoformat()
+    success_int = 1 if success else 0
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO smart_plug_history (
+                plug_name, plug_ip, requested_action,
+                previous_state, resulting_state, success,
+                trigger_source, temperature, humidity,
+                sensor_readings_count, reason, error_message, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            plug_name, plug_ip, requested_action,
+            previous_state, resulting_state, success_int,
+            trigger_source, temperature, humidity,
+            sensor_readings_count, reason, error_message, now_iso
+        ))
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def get_plug_history_records(
+    plug_name: Optional[str] = None,
+    limit: int = 50,
+    hours: Optional[float] = None
+) -> List[dict]:
+    """Retrieve history records for smart plug actions (newest first)."""
+    conditions = []
+    params = []
+
+    if plug_name:
+        conditions.append("plug_name = ?")
+        params.append(plug_name.lower().strip())
+
+    if hours is not None and hours > 0:
+        cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+        conditions.append("created_at >= ?")
+        params.append(cutoff)
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    query = f"SELECT * FROM smart_plug_history {where_clause} ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "id": r["id"],
+                    "plug_name": r["plug_name"],
+                    "plug_ip": r["plug_ip"],
+                    "requested_action": r["requested_action"],
+                    "previous_state": r["previous_state"],
+                    "resulting_state": r["resulting_state"],
+                    "success": bool(r["success"]),
+                    "trigger_source": r["trigger_source"],
+                    "temperature": r["temperature"],
+                    "humidity": r["humidity"],
+                    "sensor_readings_count": r["sensor_readings_count"],
+                    "reason": r["reason"],
+                    "error_message": r["error_message"],
+                    "created_at": r["created_at"]
+                }
+                for r in rows
+            ]
+
+
+async def get_plug_timeline_events(
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    hours: Optional[float] = None
+) -> List[dict]:
+    """
+    Get plug events ordered chronologically (oldest first).
+    Used to render trigger points on the main chart and plug activity graph.
+    """
+    conditions = []
+    params = []
+
+    if hours is not None and hours > 0:
+        cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+        conditions.append("created_at >= ?")
+        params.append(cutoff)
+    else:
+        if start_time:
+            norm_start = normalize_timestamp_input(start_time, is_end=False)
+            conditions.append("created_at >= ?")
+            params.append(norm_start)
+        if end_time:
+            norm_end = normalize_timestamp_input(end_time, is_end=True)
+            conditions.append("created_at <= ?")
+            params.append(norm_end)
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    query = f"SELECT * FROM smart_plug_history {where_clause} ORDER BY created_at ASC"
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "id": r["id"],
+                    "plug_name": r["plug_name"],
+                    "requested_action": r["requested_action"],
+                    "resulting_state": r["resulting_state"],
+                    "success": bool(r["success"]),
+                    "trigger_source": r["trigger_source"],
+                    "temperature": r["temperature"],
+                    "humidity": r["humidity"],
+                    "reason": r["reason"],
+                    "created_at": r["created_at"]
+                }
+                for r in rows
+            ]
+
 
 

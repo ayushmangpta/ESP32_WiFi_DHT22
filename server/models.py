@@ -3,7 +3,7 @@ Pydantic models for request/response validation.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 
 class SensorReading(BaseModel):
@@ -48,4 +48,44 @@ class ClearHistoryResponse(BaseModel):
     deleted_count: int
     remaining_count: int
     message: str
+
+
+# ─── Smart Plug Models ───
+
+class PlugControlResponse(BaseModel):
+    """Response model for POST /api/plugs/{plug_name}/on or off."""
+    plug: str
+    requested_action: str
+    success: bool
+    message: str
+    resulting_state: Optional[str] = None
+    is_verified: bool = False
+
+
+class PlugStateInfo(BaseModel):
+    """Model representing current status of a smart plug."""
+    plug_name: str
+    display_name: str
+    ip: Optional[str] = None
+    current_state: str = "UNKNOWN"
+    is_verified: bool = False
+    last_successful_check: Optional[str] = None
+    last_attempted_action: Optional[str] = None
+    last_action_result: Optional[str] = None
+    icon: str = "🔌"
+    role_description: str = ""
+    updated_at: Optional[str] = None
+
+
+class AutomationStatusResponse(BaseModel):
+    """Status report of recent automation evaluation."""
+    enabled: bool
+    window_size: int
+    available_readings: int
+    avg_temperature: Optional[float] = None
+    avg_humidity: Optional[float] = None
+    actions_taken: List[dict] = []
+    message: str
+    timestamp: str
+
 

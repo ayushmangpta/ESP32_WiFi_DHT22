@@ -17,7 +17,7 @@
 // ─── Wi-Fi Credentials ──────────────────────────────────────
 // Replace with YOUR Wi-Fi network name and password
 const char* WIFI_SSID     = "WIFI";      // ← Change this
-const char* WIFI_PASSWORD  = "";   // ← Change this
+const char* WIFI_PASSWORD  = "electrostatic";   // ← Change this
 
 // ─── Server Settings ────────────────────────────────────────
 // Replace with YOUR laptop's IPv4 address (run 'ipconfig' to find it)
