@@ -2,11 +2,14 @@
 Configuration and Device Registry for TP-Link Tapo Smart Plugs.
 
 Loads settings from .env and provides a centralized, reusable
-registry mapping logical plug names (e.g., 'sprinkler', 'ac', 'heater')
-to IP addresses, protocol options, and automation parameters.
+registry mapping logical plug names (e.g., 'sprinkler', 'ac', 'heater',
+'humidifier', 'fan') to IP addresses, protocol options, and automation
+parameters.  Automation thresholds are persisted in a JSON settings file
+so they can be tweaked at runtime through the API.
 """
 
 import os
+import json
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, Optional, List
@@ -17,6 +20,10 @@ ENV_PATHS = [
     Path(__file__).resolve().parent / ".env",
     Path(__file__).resolve().parent.parent / ".env",
 ]
+
+# Path for persisted automation settings (JSON file next to this module)
+AUTOMATION_SETTINGS_PATH = Path(__file__).resolve().parent / "automation_settings.json"
+
 
 def load_env_file():
     """Load variables from .env into os.environ if not already set."""
@@ -82,7 +89,7 @@ PLUG_DEFINITIONS = [
         "env_ip_var": "TAPO_SPRINKLER_IP",
         "default_ip": "192.168.1.14",
         "icon": "🌱",
-        "role_description": "Irrigation & humidity control"
+        "role_description": "Scheduled irrigation (timed cycle)"
     },
     {
         "name": "ac",
@@ -99,7 +106,23 @@ PLUG_DEFINITIONS = [
         "default_ip": "192.168.1.16",
         "icon": "🔥",
         "role_description": "Low-temperature heating"
-    }
+    },
+    {
+        "name": "humidifier",
+        "display_name": "Humidifier",
+        "env_ip_var": "TAPO_HUMIDIFIER_IP",
+        "default_ip": "192.168.1.17",
+        "icon": "💧",
+        "role_description": "Humidity maintenance (ON < 93%, OFF > 96%)"
+    },
+    {
+        "name": "fan",
+        "display_name": "Fan",
+        "env_ip_var": "TAPO_FAN_IP",
+        "default_ip": "192.168.1.18",
+        "icon": "🌀",
+        "role_description": "Humidity exhaust & scheduled air circulation"
+    },
 ]
 
 
@@ -113,7 +136,7 @@ def get_device_registry() -> Dict[str, PlugDevice]:
         name = d["name"]
         env_var = d["env_ip_var"]
         ip = os.getenv(env_var, d.get("default_ip"))
-        
+
         registry[name] = PlugDevice(
             name=name,
             display_name=d["display_name"],
@@ -142,23 +165,106 @@ def get_tapo_credentials() -> tuple[Optional[str], Optional[str]]:
     return email, password
 
 
-# ─── Automation Settings ───
+# ─── Automation Settings Defaults ───
+# These match the new automation rules exactly and serve as fallback when
+# no persisted settings file exists yet.
+
+AUTOMATION_DEFAULTS: dict = {
+    "enabled": True,
+    "window_size": 30,
+
+    # Humidifier — ON when humidity < 93%, OFF when humidity > 96%
+    "humidifier_humid_low": 93.0,
+    "humidifier_humid_high": 96.0,
+
+    # AC (Cooling) — ON when temp > 26°C, OFF when temp < 23°C
+    "ac_temp_high": 26.0,
+    "ac_temp_low": 23.0,
+
+    # Heater — ON when temp < 22°C, OFF at temp >= 26°C
+    "heater_temp_low": 22.0,
+    "heater_temp_high": 26.0,
+
+    # Fan humidity trigger — ON for 3 mins when humidity > 96%
+    "fan_humid_trigger_threshold": 96.0,
+    "fan_humidity_trigger_duration_mins": 3,
+
+    # Fan scheduled cycle — ON for 5 mins every 4 hours
+    "fan_schedule_interval_hours": 4,
+    "fan_schedule_duration_mins": 5,
+
+    # Sprinkler scheduled cycle — ON for 5 mins every 2 hours
+    "sprinkler_schedule_interval_hours": 2,
+    "sprinkler_schedule_duration_mins": 5,
+}
+
+
+def _load_settings_file() -> dict:
+    """Load persisted settings from JSON file, returning {} on any error."""
+    if AUTOMATION_SETTINGS_PATH.exists():
+        try:
+            with open(AUTOMATION_SETTINGS_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[config] Warning reading {AUTOMATION_SETTINGS_PATH}: {e}")
+    return {}
+
+
+def _save_settings_file(data: dict) -> None:
+    """Persist settings dict to JSON file (atomic-ish write)."""
+    try:
+        with open(AUTOMATION_SETTINGS_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"[config] Error saving settings: {e}")
+
+
 def get_automation_settings() -> dict:
-    """Return automation rules thresholds and parameters."""
-    return {
-        "enabled": os.getenv("AUTOMATION_ENABLED", "true").lower() in ("true", "1", "yes"),
-        "window_size": int(os.getenv("AUTOMATION_READINGS_WINDOW", "30")),
-        # AC (Cooling)
-        "ac_temp_high": float(os.getenv("AC_TEMP_HIGH", "28.0")),
-        "ac_temp_low": float(os.getenv("AC_TEMP_LOW", "25.0")),
-        # Heater (Heating)
-        "heater_temp_low": float(os.getenv("HEATER_TEMP_LOW", "18.0")),
-        "heater_temp_high": float(os.getenv("HEATER_TEMP_HIGH", "21.0")),
-        # Sprinkler (Moisture)
-        "sprinkler_humid_low": float(os.getenv("SPRINKLER_HUMID_LOW", "45.0")),
-        "sprinkler_humid_high": float(os.getenv("SPRINKLER_HUMID_HIGH", "65.0")),
-        "sprinkler_min_temp": float(os.getenv("SPRINKLER_MIN_TEMP", "15.0")),
-    }
+    """
+    Return automation rules thresholds and parameters.
+
+    Resolution order:
+      1. Persisted JSON settings file (automation_settings.json)
+      2. Environment variables (legacy compat — only for 'enabled' and 'window_size')
+      3. AUTOMATION_DEFAULTS
+    """
+    # Start from defaults
+    settings = dict(AUTOMATION_DEFAULTS)
+
+    # Override enabled / window_size from env if set (backward compat)
+    env_enabled = os.getenv("AUTOMATION_ENABLED")
+    if env_enabled is not None:
+        settings["enabled"] = env_enabled.lower() in ("true", "1", "yes")
+    env_window = os.getenv("AUTOMATION_READINGS_WINDOW")
+    if env_window is not None:
+        try:
+            settings["window_size"] = int(env_window)
+        except ValueError:
+            pass
+
+    # Layer persisted file on top (UI-tweaked values win)
+    persisted = _load_settings_file()
+    settings.update(persisted)
+
+    return settings
+
+
+def update_automation_settings(updates: dict) -> dict:
+    """
+    Merge *updates* into the persisted settings file and return the
+    resulting full settings dict.  Only keys present in AUTOMATION_DEFAULTS
+    are accepted; unknown keys are silently ignored.
+    """
+    persisted = _load_settings_file()
+
+    for key, value in updates.items():
+        if key in AUTOMATION_DEFAULTS and value is not None:
+            persisted[key] = value
+
+    _save_settings_file(persisted)
+
+    # Return the fully-resolved settings
+    return get_automation_settings()
 
 
 # ─── Startup Validation ───

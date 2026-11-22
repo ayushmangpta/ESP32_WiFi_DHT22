@@ -8,15 +8,22 @@ Endpoints:
     GET  /api/readings/history       — Get recent readings (JSON)
     POST /api/readings/clear         — Clear historical sensor data
 
-  Smart Plug Control & Automation (Phase 2):
+  Smart Plug Control & Automation:
     POST /api/plugs/{plug_name}/on   — Turn a smart plug ON
     POST /api/plugs/{plug_name}/off  — Turn a smart plug OFF
     GET  /api/plugs                  — Get state of all registered plugs
     GET  /api/plugs/{plug_name}      — Get state of a specific plug
     GET  /api/plugs/history          — Retrieve smart plug action history
     GET  /api/plugs/timeline         — Chronological plug events for chart overlays
-    POST /api/automation/evaluate    — Manually evaluate automation rules
-    GET  /api/automation/status      — Get current automation settings and status
+
+  Automation & Scheduling (Tweakable via UI):
+    GET  /api/automation/settings    — Get all current thresholds & schedule settings
+    POST /api/automation/settings    — Update thresholds & schedule settings (persisted)
+    GET  /api/automation/status      — Overview of rules and active parameters
+    POST /api/automation/evaluate    — Manually evaluate environmental automation rules
+    GET  /api/automation/scheduler   — Get background scheduler status and countdowns
+    POST /api/automation/scheduler/sprinkler/run-now — Immediately run 5m sprinkler cycle
+    POST /api/automation/scheduler/fan/run-now       — Immediately run 5m fan cycle
 
   Dashboard:
     GET  /                           — Browser dashboard
@@ -25,13 +32,18 @@ Endpoints:
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from config import get_device_registry, validate_config, get_automation_settings
+from config import (
+    get_device_registry,
+    validate_config,
+    get_automation_settings,
+    update_automation_settings
+)
 from database import (
     init_db,
     insert_reading,
@@ -52,6 +64,7 @@ from models import (
     PlugControlResponse,
     PlugStateInfo,
     AutomationStatusResponse,
+    AutomationSettingsUpdate
 )
 from services.smart_plug_service import (
     control_plug,
@@ -59,12 +72,13 @@ from services.smart_plug_service import (
     get_all_plugs_status,
 )
 from automation.plug_rules import evaluate_automation_rules
+from automation.scheduler import scheduler
 
 
 # ─── App Lifecycle ────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize the database and validate environment on startup."""
+    """Initialize database and start background scheduler on startup."""
     print()
     print("═══════════════════════════════════════════════════════")
     print("  ESP32 DHT22 Logger & Tapo Smart Plug Automation Server")
@@ -89,20 +103,27 @@ async def lifespan(app: FastAPI):
         print("  ✅ All smart plug credentials and IP addresses configured.")
 
     auto_cfg = get_automation_settings()
-    auto_status = "ENABLED" if auto_cfg["enabled"] else "DISABLED"
-    print(f"  🤖 Automation: {auto_status} (Sliding Window: {auto_cfg['window_size']} readings)")
+    auto_status = "ENABLED" if auto_cfg.get("enabled", True) else "DISABLED"
+    print(f"  🤖 Automation: {auto_status} (Sliding Window: {auto_cfg.get('window_size', 30)} readings)")
     print(f"  Dashboard: http://localhost:8000")
     print("═══════════════════════════════════════════════════════")
     print()
 
+    # Start background scheduler for periodic sprinkler, fan, and timers
+    await scheduler.start()
+
     yield
-    print("Server shutting down. Database preserved.")
+
+    # Shutdown
+    print("Server shutting down...")
+    await scheduler.stop()
+    print("Database preserved.")
 
 
 app = FastAPI(
     title="ESP32 DHT22 & Tapo Smart Plug Automation",
-    description="ESP32 Temperature & Humidity logger with automated TP-Link Tapo smart plug control",
-    version="2.0.0",
+    description="ESP32 Temperature & Humidity logger with automated TP-Link Tapo smart plug control and UI-tweakable rules",
+    version="2.1.0",
     lifespan=lifespan
 )
 
@@ -122,7 +143,7 @@ async def receive_reading(reading: SensorReading):
     row_id = await insert_reading(reading.temperature, reading.humidity)
     latest = await get_latest_reading()
 
-    # Trigger automation asynchronously in the background so the ESP32 is not blocked
+    # Trigger automation asynchronously in the background so ESP32 is not blocked
     asyncio.create_task(evaluate_automation_rules())
 
     return SensorReadingResponse(
@@ -201,14 +222,11 @@ async def clear_history(req: ClearHistoryRequest):
     )
 
 
-# ─── Smart Plug API Endpoints (Phase 2) ───────────────────────
+# ─── Smart Plug API Endpoints ─────────────────────────────────
 
 @app.post("/api/plugs/{plug_name}/on", response_model=PlugControlResponse)
 async def turn_plug_on(plug_name: str):
-    """
-    Turn a registered smart plug ON.
-    Validates plug name, issues kasa command via TPAP, and logs action to database.
-    """
+    """Turn a registered smart plug ON."""
     registry = get_device_registry()
     name_clean = plug_name.lower().strip()
     if name_clean not in registry:
@@ -221,7 +239,7 @@ async def turn_plug_on(plug_name: str):
         plug_name=name_clean,
         action="ON",
         trigger_source="manual",
-        reason="Manual API request"
+        reason="Manual UI / API request"
     )
 
     status_code = status.HTTP_200_OK if result["success"] else status.HTTP_502_BAD_GATEWAY
@@ -230,10 +248,7 @@ async def turn_plug_on(plug_name: str):
 
 @app.post("/api/plugs/{plug_name}/off", response_model=PlugControlResponse)
 async def turn_plug_off(plug_name: str):
-    """
-    Turn a registered smart plug OFF.
-    Validates plug name, issues kasa command via TPAP, and logs action to database.
-    """
+    """Turn a registered smart plug OFF."""
     registry = get_device_registry()
     name_clean = plug_name.lower().strip()
     if name_clean not in registry:
@@ -246,7 +261,7 @@ async def turn_plug_off(plug_name: str):
         plug_name=name_clean,
         action="OFF",
         trigger_source="manual",
-        reason="Manual API request"
+        reason="Manual UI / API request"
     )
 
     status_code = status.HTTP_200_OK if result["success"] else status.HTTP_502_BAD_GATEWAY
@@ -255,19 +270,13 @@ async def turn_plug_off(plug_name: str):
 
 @app.get("/api/plugs")
 async def get_all_plugs(refresh: bool = False):
-    """
-    Get the state and metadata of all registered smart plugs.
-    Pass ?refresh=true to actively query physical hardware via kasa CLI.
-    """
+    """Get state and metadata of all registered smart plugs."""
     return await get_all_plugs_status(refresh_physical=refresh)
 
 
 @app.get("/api/plugs/{plug_name}")
 async def get_single_plug(plug_name: str, refresh: bool = False):
-    """
-    Get the state and metadata of a specific smart plug.
-    Pass ?refresh=true to actively query physical hardware via kasa CLI.
-    """
+    """Get state and metadata of a specific smart plug."""
     registry = get_device_registry()
     name_clean = plug_name.lower().strip()
     if name_clean not in registry:
@@ -286,7 +295,7 @@ async def get_plug_history(
     limit: int = 50,
     hours: Optional[float] = None
 ):
-    """Get historical log of attempted smart plug actions."""
+    """Get historical log of smart plug actions."""
     return await get_plug_history_records(plug_name=plug_name, limit=limit, hours=hours)
 
 
@@ -296,14 +305,63 @@ async def get_plug_timeline(
     end_time: Optional[str] = None,
     hours: Optional[float] = None
 ):
-    """
-    Get chronological plug events (oldest first) within a timeframe.
-    Used for overlaying trigger markers on the dashboard temperature/humidity chart.
-    """
+    """Get chronological plug events (oldest first) within a timeframe."""
     return await get_plug_timeline_events(start_time=start_time, end_time=end_time, hours=hours)
 
 
-# ─── Automation API Routes ────────────────────────────────────
+# ─── Automation & Settings API Routes ─────────────────────────
+
+@app.get("/api/automation/settings")
+async def get_settings():
+    """Retrieve all current automation thresholds and schedule intervals."""
+    return get_automation_settings()
+
+
+@app.post("/api/automation/settings")
+async def update_settings(payload: AutomationSettingsUpdate):
+    """
+    Update automation settings & thresholds.
+    Persists to automation_settings.json and takes effect immediately.
+    """
+    updates = payload.model_dump(exclude_unset=True)
+    updated = update_automation_settings(updates)
+    return {
+        "status": "ok",
+        "message": "Automation settings updated and saved successfully.",
+        "settings": updated
+    }
+
+
+@app.get("/api/automation/scheduler")
+async def get_scheduler_status():
+    """Get real-time status of the background scheduler and countdowns."""
+    return scheduler.get_status()
+
+
+@app.post("/api/automation/scheduler/sprinkler/run-now")
+async def run_sprinkler_now(duration_mins: Optional[float] = None):
+    """Immediately start a sprinkler cycle for duration_mins (default from settings)."""
+    settings = get_automation_settings()
+    duration = duration_mins or settings.get("sprinkler_schedule_duration_mins", 5.0)
+    scheduler.trigger_sprinkler_cycle(
+        duration_mins=duration,
+        reason=f"Manual Run Now trigger ({duration:.0f}m)"
+    )
+    return {"status": "ok", "message": f"Sprinkler cycle started for {duration:.0f} minutes."}
+
+
+@app.post("/api/automation/scheduler/fan/run-now")
+async def run_fan_now(duration_mins: Optional[float] = None):
+    """Immediately start a fan cycle for duration_mins (default from settings)."""
+    settings = get_automation_settings()
+    duration = duration_mins or settings.get("fan_schedule_duration_mins", 5.0)
+    scheduler.trigger_fan_cycle(
+        duration_mins=duration,
+        reason=f"Manual Run Now trigger ({duration:.0f}m)",
+        source="scheduled"
+    )
+    return {"status": "ok", "message": f"Fan cycle started for {duration:.0f} minutes."}
+
 
 @app.post("/api/automation/evaluate", response_model=AutomationStatusResponse)
 async def trigger_automation_evaluation():
@@ -313,15 +371,18 @@ async def trigger_automation_evaluation():
 
 @app.get("/api/automation/status")
 async def get_automation_status():
-    """Get current automation thresholds, sliding window size, and operational settings."""
+    """Get current automation status and detailed rules descriptions."""
     settings = get_automation_settings()
     return {
-        "status": "active" if settings["enabled"] else "disabled",
+        "status": "active" if settings.get("enabled", True) else "disabled",
         "settings": settings,
         "rules_description": {
-            "sprinkler": f"ON when humidity < {settings['sprinkler_humid_low']}% & temp >= {settings['sprinkler_min_temp']}°C; OFF when humidity >= {settings['sprinkler_humid_high']}% or temp < {settings['sprinkler_min_temp']}°C",
-            "ac": f"ON when temp > {settings['ac_temp_high']}°C; OFF when temp < {settings['ac_temp_low']}°C",
-            "heater": f"ON when temp < {settings['heater_temp_low']}°C; OFF when temp > {settings['heater_temp_high']}°C"
+            "humidifier": f"ON when humidity < {settings.get('humidifier_humid_low', 93)}%; OFF when humidity > {settings.get('humidifier_humid_high', 96)}%",
+            "ac": f"ON when temp > {settings.get('ac_temp_high', 26)}°C; OFF when temp < {settings.get('ac_temp_low', 23)}°C",
+            "heater": f"ON when temp < {settings.get('heater_temp_low', 22)}°C; stays ON until temp >= {settings.get('heater_temp_high', 26)}°C",
+            "fan_humidity": f"ON for {settings.get('fan_humidity_trigger_duration_mins', 3)} mins when humidity > {settings.get('fan_humid_trigger_threshold', 96)}%",
+            "fan_schedule": f"Scheduled ON for {settings.get('fan_schedule_duration_mins', 5)} mins every {settings.get('fan_schedule_interval_hours', 4)} hours",
+            "sprinkler_schedule": f"Scheduled ON for {settings.get('sprinkler_schedule_duration_mins', 5)} mins every {settings.get('sprinkler_schedule_interval_hours', 2)} hours"
         }
     }
 

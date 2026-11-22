@@ -345,6 +345,31 @@ You should see a beautiful dark dashboard with:
 
 ---
 
+## 📍 Phase 6: Smart Plug Automation & Settings
+
+### Step 6.1 — Supported Smart Plugs
+The server controls 5 TP-Link Tapo P110 smart plugs via the local TPAP protocol:
+- **🌱 Sprinkler**: Scheduled irrigation cycle (default: 5 min cycle every 2 hours).
+- **❄️ Air Conditioner (AC)**: Turns ON if temperature > 26°C, turns OFF when temperature < 23°C.
+- **🔥 Space Heater**: Turns ON if temperature < 22°C, remains ON until temperature reaches 26°C.
+- **💨 Humidifier**: Turns ON if humidity < 93%, turns OFF if humidity > 96%.
+- **🌀 Fan**: Turns ON for 3 mins if humidity > 96%; also runs every 4 hours for 5 mins.
+
+### Step 6.2 — Tweaking Rules Through the UI
+1. Open the dashboard at `http://localhost:8000`.
+2. Click **⚙️ Automation Settings** above the plug cards to expand the configuration drawer.
+3. You can edit any threshold:
+   - Humidifier low/high humidity %
+   - AC high/low temperature °C
+   - Heater low/target temperature °C
+   - Fan humidity trigger % and run duration in minutes
+   - Sprinkler cycle interval (hours) and duration (minutes)
+   - Fan schedule interval (hours) and duration (minutes)
+4. Click **💾 Save Settings**. Changes are saved to `server/automation_settings.json` and take effect immediately without restarting the server!
+5. In the **Scheduler Status** bar, you can see live countdowns to the next Sprinkler and Fan runs, or click **Run Sprinkler Now** / **Run Fan Now** for immediate manual test cycles.
+
+---
+
 ## 🔄 How to Stop and Restart
 
 | Action | How | Data Loss? |

@@ -3,7 +3,7 @@ Pydantic models for request/response validation.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 
 class SensorReading(BaseModel):
@@ -89,3 +89,33 @@ class AutomationStatusResponse(BaseModel):
     timestamp: str
 
 
+# ─── Automation Settings & Scheduler Models ───
+
+class AutomationSettingsUpdate(BaseModel):
+    """Model for updating automation thresholds and schedules via API."""
+    enabled: Optional[bool] = None
+    window_size: Optional[int] = Field(None, ge=1, le=200)
+
+    # Humidifier thresholds
+    humidifier_humid_low: Optional[float] = Field(None, ge=0.0, le=100.0)
+    humidifier_humid_high: Optional[float] = Field(None, ge=0.0, le=100.0)
+
+    # AC thresholds
+    ac_temp_high: Optional[float] = Field(None, ge=-20.0, le=60.0)
+    ac_temp_low: Optional[float] = Field(None, ge=-20.0, le=60.0)
+
+    # Heater thresholds
+    heater_temp_low: Optional[float] = Field(None, ge=-20.0, le=60.0)
+    heater_temp_high: Optional[float] = Field(None, ge=-20.0, le=60.0)
+
+    # Fan humidity trigger
+    fan_humid_trigger_threshold: Optional[float] = Field(None, ge=0.0, le=100.0)
+    fan_humidity_trigger_duration_mins: Optional[float] = Field(None, ge=0.1, le=1440.0)
+
+    # Fan scheduled cycle
+    fan_schedule_interval_hours: Optional[float] = Field(None, ge=0.1, le=168.0)
+    fan_schedule_duration_mins: Optional[float] = Field(None, ge=0.1, le=1440.0)
+
+    # Sprinkler scheduled cycle
+    sprinkler_schedule_interval_hours: Optional[float] = Field(None, ge=0.1, le=168.0)
+    sprinkler_schedule_duration_mins: Optional[float] = Field(None, ge=0.1, le=1440.0)
