@@ -222,18 +222,34 @@ You'll also see HTTP errors like `HTTP Error: -1` — that's normal! The Python 
 
 ### Step 3.1 — Install Python Packages
 
-**What:** Install FastAPI and other required Python packages in your conda environment.
+**What:** Install FastAPI, Tapo plug controller (`python-kasa`), database driver, and all required server packages in your conda environment.
 
 **How:**
 1. Open **Anaconda Prompt**.
 2. Activate your environment:
-   ```
+   ```cmd
    conda activate arduino-env
    ```
-3. Install packages:
+3. Install using `requirements.txt`:
+   ```cmd
+   cd G:\ESP32_WiFi_DHT22
+   pip install -r requirements.txt
    ```
-   pip install fastapi uvicorn aiosqlite jinja2 python-multipart
-   ```
+
+> [!TIP]
+> **Direct One-Line Command (Alternative):**
+> If you prefer not to change directories, copy and paste this single command directly into Anaconda Prompt:
+> ```cmd
+> pip install fastapi "uvicorn[standard]" aiosqlite jinja2 python-multipart pydantic python-dotenv python-kasa esptool
+> ```
+
+**Included Packages & Purpose:**
+- `fastapi` & `uvicorn[standard]`: High-performance async REST API and web server
+- `aiosqlite`: Async SQLite driver for sensor history and persistent automation settings
+- `jinja2` & `python-multipart`: Server-side dashboard rendering and form handling
+- `pydantic` & `python-dotenv`: Data validation and `.env` configuration loader
+- `python-kasa`: Communication with TP-Link Tapo P110 smart plugs (KLAP/TPAP protocol)
+- `esptool`: Serial flashing utility for ESP32
 
 **Expected output:** Should end with `Successfully installed ...`
 

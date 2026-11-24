@@ -28,9 +28,11 @@ G:\ESP32_WiFi_DHT22\
 ├── project.md                    # Project spec
 ├── implementation_plan.md        # This file
 ├── setup_guide.md                # Step-by-step walkthrough
+├── requirements.txt              # Project Python dependencies & direct install commands
 ├── esp32_sketch/
 │   └── esp32_sketch.ino          # Arduino code for ESP32
 └── server/
+    ├── requirements.txt          # Server dependencies (copy)
     ├── main.py                   # FastAPI server & endpoints
     ├── config.py                 # Device registry & SQL-backed settings
     ├── database.py               # Async SQLite database setup & SQL settings tables
